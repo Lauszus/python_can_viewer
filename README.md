@@ -4,6 +4,8 @@
 
 The code is released under the GNU General Public License.
 _________
+[![Build Status](https://travis-ci.com/Lauszus/python_can_viewer.svg?branch=master)](https://travis-ci.com/Lauszus/python_can_viewer)
+[![codecov](https://codecov.io/gh/Lauszus/python_can_viewer/branch/master/graph/badge.svg)](https://codecov.io/gh/Lauszus/python_can_viewer)
 
 A simple CAN viewer terminal application written in Python. Both Python 2 and Python 3 are supported.
 

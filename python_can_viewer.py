@@ -184,14 +184,14 @@ def draw_header(stdscr):
     draw_line(stdscr, 0, 88, 'Node ID', curses.A_BOLD)
 
 
-def redraw_screen(stdscr, ids, start_time):
+def redraw_screen(stdscr, ids, start_time):  # pragma: no cover
     # Trigger a complete redraw
     draw_header(stdscr)
     for key in ids.keys():
         draw_can_bus_message(stdscr, ids, start_time, ids[key][2])
 
 
-def main(stdscr):
+def main(stdscr):  # pragma: no cover
     global scroll
 
     channel = 'can0'  # Use the first interface by default
@@ -263,7 +263,7 @@ def main(stdscr):
             redraw_screen(stdscr, ids, start_time)
 
 
-if __name__ == '__main__':
+if __name__ == '__main__':  # pragma: no cover
     # Catch ctrl+c
     try:
         curses.wrapper(main)
