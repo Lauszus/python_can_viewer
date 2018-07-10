@@ -5,7 +5,7 @@
 The code is released under the GNU General Public License.
 _________
 
-A simple Python CAN Viewer terminal application written in Python. Both Python 2 and Python 3 are supported.
+A simple CAN viewer terminal application written in Python. Both Python 2 and Python 3 are supported.
 
 ## Usage
 
@@ -18,7 +18,13 @@ pip install python-can
 To run the script simply execute:
 
 ```bash
-python python-can-viewer.py
+python python_can_viewer.py
+```
+
+By default it will be using the ```can0``` interface. The interface can be specified as the first argument, for instance to use ```can1```:
+
+```bash
+python python_can_viewer.py can1
 ```
 
 A screenshot of the application can be seen below:
