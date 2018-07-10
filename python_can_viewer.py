@@ -235,9 +235,9 @@ def main(stdscr):
 
         # Clear by pressing 'c'
         elif key == ord('c'):
-            draw_header(stdscr)
             ids = {}
             scroll = 0
+            draw_header(stdscr)
 
         # Pause by pressing space
         elif key == KEY_SPACE:
