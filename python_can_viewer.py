@@ -177,11 +177,16 @@ def main(stdscr):
     # Clear the terminal and draw the headers
     draw_header(stdscr)
 
+    # Used for pausing the viewer
+    paused = False
+
     while 1:
-        # Read the CAN-Bus and draw it in the terminal window
-        msg = can_bus.recv(timeout=0)
-        if msg is not None:
-            draw_can_bus_message(stdscr, msg)
+        # Do not read the CAN-Bus when in paused mode
+        if not paused:
+            # Read the CAN-Bus and draw it in the terminal window
+            msg = can_bus.recv(timeout=0)
+            if msg is not None:
+                draw_can_bus_message(stdscr, msg)
 
         # Read the terminal input
         key = stdscr.getch()
@@ -198,10 +203,7 @@ def main(stdscr):
 
         # Pause by pressing space
         elif key == KEY_SPACE:
-            stdscr.nodelay(False)
-            while stdscr.getch() != KEY_SPACE:
-                pass
-            stdscr.nodelay(True)
+            paused = not paused
 
         # Scroll by pressing up/down
         elif key == curses.KEY_UP:
