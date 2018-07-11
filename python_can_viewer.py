@@ -51,15 +51,6 @@ def _parse_canopen_message(msg):
         canopen_function_code = msg.arbitration_id & CANOPEN_FUNCTION_CODE_MASK
         if canopen_function_code in canopen_function_codes:
             canopen_node_id = msg.arbitration_id & CANOPEN_NODE_ID_MASK
-            if 1 <= canopen_node_id <= 127:  # Make sure the node ID is valid
-                canopen_node_id_string = '0x{0:02X}'.format(canopen_node_id)
-            elif canopen_function_code == 0x000:
-                # The NMT command sends the node ID as the second byte, except when it is 0,
-                # then the command is sent to all nodes
-                if msg.data[1] == 0:
-                    canopen_node_id_string = 'ALL'
-                else:
-                    canopen_node_id_string = '0x{0:02X}'.format(msg.data[1])
 
             # The SYNC and EMCY uses the same function code, so determine which message it is by checking both the
             # node ID and message length
@@ -72,7 +63,7 @@ def _parse_canopen_message(msg):
             elif (canopen_function_code == 0x000 or canopen_function_code == 0x100) and \
                     (canopen_node_id != 0 or msg.dlc not in canopen_function_codes[canopen_function_code]):
                 # It is not a CANopen message, as the node ID is not added to these command
-                canopen_function_code_string, canopen_node_id_string = None, None
+                canopen_function_code_string = None
             else:
                 if isinstance(canopen_function_codes[canopen_function_code], dict):
                     # Make sure the message has the defined length
@@ -83,6 +74,18 @@ def _parse_canopen_message(msg):
                     # Make sure the node ID is valid
                     if 1 <= canopen_node_id <= 127:
                         canopen_function_code_string = canopen_function_codes[canopen_function_code]
+
+            # Now determine set the node ID string
+            if canopen_function_code_string:
+                if 1 <= canopen_node_id <= 127:  # Make sure the node ID is valid
+                    canopen_node_id_string = '0x{0:02X}'.format(canopen_node_id)
+                elif canopen_function_code == 0x000:
+                    # The NMT command sends the node ID as the second byte, except when it is 0,
+                    # then the command is sent to all nodes
+                    if msg.data[1] == 0:
+                        canopen_node_id_string = 'ALL'
+                    else:
+                        canopen_node_id_string = '0x{0:02X}'.format(msg.data[1])
         elif (msg.arbitration_id == 0x7E4 or msg.arbitration_id == 0x7E5) and \
                 msg.dlc in canopen_function_codes[msg.arbitration_id]:
             # Check if it is the LSS commands
