@@ -108,12 +108,14 @@ def draw_can_bus_message(stdscr, ids, start_time, msg, sorting=False):
 
     if not sorting:
         if new_id_added or length_changed:
+            # Increment the index if it was just added, but keep it if the length just changed
+            row = len(ids) + 1 if new_id_added else ids[key][0]
+
             # It's a new message ID or the length has changed, so add it to the dict
             # The first index is the row index, the second is the frame counter,
             # the third is a copy of the CAN-Bus frame
             # and the forth index is the time since the previous message
-            ids[key] = [len(ids) + 1, 0, msg, 0]
-            new_id_added = True
+            ids[key] = [row, 0, msg, 0]
         else:
             # Calculate the time since the last message and save the timestamp
             ids[key][3] = msg.timestamp - ids[key][2].timestamp
