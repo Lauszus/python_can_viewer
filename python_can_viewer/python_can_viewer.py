@@ -230,11 +230,17 @@ def draw_can_bus_message(stdscr, ids, start_time, data_structs, msg):
         if canopen_node_id_string:
             draw_line(stdscr, ids[key][0], 88, canopen_node_id_string)
 
-        try:
-            data = _unpack_data(msg.arbitration_id, data_structs, msg.data)
-            draw_line(stdscr, ids[key][0], 97, ' '.join(str(x) for x in data))
-        except (ValueError, struct.error, TypeError):
-            pass
+        if data_structs:
+            try:
+                data = _unpack_data(msg.arbitration_id, data_structs, msg.data)
+                try:
+                    values_string = ' '.join(str(x) for x in data)
+                except TypeError:
+                    # The data was not iterable fx a single int
+                    values_string = str(data)
+                draw_line(stdscr, ids[key][0], 97, values_string)
+            except (ValueError, struct.error):
+                pass
 
     return ids[key][0]
 
