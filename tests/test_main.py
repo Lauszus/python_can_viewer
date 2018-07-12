@@ -152,7 +152,7 @@ def test_receive(can_bus):
     ids = {}
     start_time = time.time()
 
-    # Receive the messages we just sent
+    # Receive the messages we just sent in 'test_canopen'
     while 1:
         msg = can_bus.recv(timeout=0)
         if msg is not None:
