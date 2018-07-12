@@ -7,3 +7,5 @@ htmlcov/
 !.coveragerc
 .eggs/
 *.egg-info/
+build/
+dist/
