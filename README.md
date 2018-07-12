@@ -11,22 +11,23 @@ A simple CAN viewer terminal application written in Python. Both Python 2 and Py
 
 ## Usage
 
-The project is using [python-can](https://github.com/hardbyte/python-can) for reading the CAN-Bus, thus it needs to be installed:
+The project can be installed by first cloning the repository and then installing it via pip:
 
 ```bash
-pip install python-can
+git clone https://github.com/Lauszus/python_can_viewer
+pip install -e python_can_viewer
 ```
 
 To run the script simply execute:
 
 ```bash
-python python_can_viewer.py
+python -m python_can_viewer
 ```
 
 By default it will be using the ```can0``` interface. The interface can be specified as the first argument, for instance to use ```can1```:
 
 ```bash
-python python_can_viewer.py can1
+python -m python_can_viewer can1
 ```
 
 A screenshot of the application can be seen below:

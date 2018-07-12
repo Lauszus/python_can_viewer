@@ -5,3 +5,5 @@ venv/
 htmlcov/
 .coverage*
 !.coveragerc
+.eggs/
+*.egg-info/

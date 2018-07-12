@@ -11,10 +11,11 @@
 import can
 import curses
 import math
-from six import byte2int, binary_type
+import six
 import struct
 import sys
 import time
+
 from typing import Union, Dict, List
 
 # Keycodes not defined in curses
@@ -81,7 +82,7 @@ def _pack_data(cmd, cmd_to_struct, *args):  # type: (Union(bytes, int), Dict, *f
 
             return struct_t.pack(*data)
 
-    raise ValueError('Unknown command: 0x{:02X}'.format(byte2int(cmd) if isinstance(cmd, binary_type) else cmd))
+    raise ValueError('Unknown command: 0x{:02X}'.format(six.byte2int(cmd) if isinstance(cmd, six.binary_type) else cmd))
 
 
 # Unpack the data and then convert it into SI-units
@@ -109,7 +110,7 @@ def _unpack_data(cmd, cmd_to_struct, data):  # type: (Union(bytes, int), Dict, b
                 return values[0]  # Extract the value if there is only one element in the tuple
             return values
 
-    raise ValueError('Unknown command: 0x{:02X}'.format(byte2int(cmd) if isinstance(cmd, binary_type) else cmd))
+    raise ValueError('Unknown command: 0x{:02X}'.format(six.byte2int(cmd) if isinstance(cmd, six.binary_type) else cmd))
 
 
 def parse_canopen_message(msg):
