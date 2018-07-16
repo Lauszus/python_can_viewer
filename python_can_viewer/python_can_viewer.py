@@ -235,7 +235,13 @@ def draw_can_bus_message(stdscr, ids, start_time, data_structs, msg, sorting=Fal
             try:
                 data = unpack_data(msg.arbitration_id, data_structs, msg.data)
                 try:
-                    values_string = ' '.join(str(x) for x in data)
+                    values_list = []
+                    for x in data:
+                        if isinstance(x, float):
+                            values_list.append('{0:.6f}'.format(x))
+                        else:
+                            values_list.append(str(x))
+                    values_string = ' '.join(values_list)
                 except TypeError:
                     # The data was not iterable fx a single int
                     values_string = str(data)
