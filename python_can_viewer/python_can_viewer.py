@@ -47,7 +47,7 @@ scroll = 0
 
 
 # Convert it into raw integer values and then pack the data
-def _pack_data(cmd, cmd_to_struct, *args):  # type: (Union(bytes, int), Dict, *float) -> bytes
+def pack_data(cmd, cmd_to_struct, *args):  # type: (Union(bytes, int), Dict, *float) -> bytes
     if not cmd_to_struct or len(args) == 0:
         # If no arguments are given, then the message do not contain a data package
         return b''
@@ -63,7 +63,7 @@ def _pack_data(cmd, cmd_to_struct, *args):  # type: (Union(bytes, int), Dict, *f
                 fmt = struct_t.format
 
                 # Make sure the endian is given as the first argument
-                assert fmt[0] == ord(b'<') or fmt[0] == ord(b'>')
+                assert six.byte2int(fmt) == ord(b'<') or six.byte2int(fmt) == ord(b'>')
 
                 # Disable rounding if the format is a float
                 data = []
@@ -83,7 +83,7 @@ def _pack_data(cmd, cmd_to_struct, *args):  # type: (Union(bytes, int), Dict, *f
 
 
 # Unpack the data and then convert it into SI-units
-def _unpack_data(cmd, cmd_to_struct, data):  # type: (Union(bytes, int), Dict, bytes) -> Union[List[float], bytes]
+def unpack_data(cmd, cmd_to_struct, data):  # type: (Union(bytes, int), Dict, bytes) -> Union[List[float], bytes]
     if not cmd_to_struct or len(data) == 0:
         # These messages do not contain a data package
         return b''
@@ -101,10 +101,10 @@ def _unpack_data(cmd, cmd_to_struct, data):  # type: (Union(bytes, int), Dict, b
             else:
                 # No conversion from SI-units is needed
                 struct_t = value  # type: struct.Struct
-                values = struct_t.unpack(data)
+                values = list(struct_t.unpack(data))
 
             if len(values) == 1:
-                return values[0]  # Extract the value if there is only one element in the tuple
+                return values[0]  # Extract the value if there is only one element in the list
             return values
 
     raise ValueError('Unknown command: 0x{:02X}'.format(six.byte2int(cmd) if isinstance(cmd, six.binary_type) else cmd))
@@ -233,7 +233,7 @@ def draw_can_bus_message(stdscr, ids, start_time, data_structs, msg, sorting=Fal
 
         if data_structs:
             try:
-                data = _unpack_data(msg.arbitration_id, data_structs, msg.data)
+                data = unpack_data(msg.arbitration_id, data_structs, msg.data)
                 try:
                     values_string = ' '.join(str(x) for x in data)
                 except TypeError:

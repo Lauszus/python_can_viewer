@@ -191,14 +191,55 @@ def test_receive(can_bus):
                     assert id['count'] == 1
                 else:
                     assert id['count'] == 2
-                    # dt should be ~0.1 s
-                    assert 0.09 < id['dt'] < 0.11
+                    assert pytest.approx(id['dt'], 0.1)  # dt should be ~0.1 s
             else:
                 # Make sure dt is 0
                 if id['count'] == 1:
                     assert id['dt'] == 0
         else:
             break
+
+
+def test_pack_unpack():
+    data_structs = {
+        # CANopen node 1
+        CANOPEN_TPDO1 + 1: struct.Struct('<bBh2H'),
+        CANOPEN_TPDO2 + 1: (struct.Struct('<HHB'), 100., 10., 1),
+        CANOPEN_TPDO3 + 1: struct.Struct('<ff'),
+        CANOPEN_TPDO4 + 1: (struct.Struct('<ff'), math.pi / 180., math.pi / 180.),
+        CANOPEN_TPDO1 + 2: None,
+        CANOPEN_TPDO2 + 2: struct.Struct('>lL'),
+    }  # type: Dict[Union[bytes, Tuple[bytes, ...]], Union[struct.Struct, Tuple, None]]
+
+    raw_data = pack_data(CANOPEN_TPDO1 + 1, data_structs, -7, 13, -1024, 2048, 0xFFFF)
+    parsed_data = unpack_data(CANOPEN_TPDO1 + 1, data_structs, raw_data)
+    assert parsed_data == [-7, 13, -1024, 2048, 0xFFFF]
+    assert all(isinstance(d, int) for d in parsed_data)
+
+    raw_data = pack_data(CANOPEN_TPDO2 + 1, data_structs, 12.34, 4.5, 6)
+    parsed_data = unpack_data(CANOPEN_TPDO2 + 1, data_structs, raw_data)
+    assert pytest.approx(parsed_data, [12.34, 4.5, 6])
+    assert isinstance(parsed_data[0], float) and isinstance(parsed_data[1], float) and isinstance(parsed_data[2], int)
+
+    raw_data = pack_data(CANOPEN_TPDO3 + 1, data_structs, 123.45, 67.89)
+    parsed_data = unpack_data(CANOPEN_TPDO3 + 1, data_structs, raw_data)
+    assert pytest.approx(parsed_data, [123.45, 67.89])
+    assert all(isinstance(d, float) for d in parsed_data)
+
+    raw_data = pack_data(CANOPEN_TPDO4 + 1, data_structs, math.pi / 2., math.pi)
+    parsed_data = unpack_data(CANOPEN_TPDO4 + 1, data_structs, raw_data)
+    assert pytest.approx(parsed_data, [math.pi / 2., math.pi])
+    assert all(isinstance(d, float) for d in parsed_data)
+
+    raw_data = pack_data(CANOPEN_TPDO1 + 2, data_structs)
+    parsed_data = unpack_data(CANOPEN_TPDO1 + 2, data_structs, raw_data)
+    assert parsed_data == b''
+    assert isinstance(parsed_data, bytes)
+
+    raw_data = pack_data(CANOPEN_TPDO2 + 2, data_structs, -2147483648, 0xFFFFFFFF)
+    parsed_data = unpack_data(CANOPEN_TPDO2 + 2, data_structs, raw_data)
+    assert parsed_data == [-2147483648, 0xFFFFFFFF]
+    assert all(isinstance(d, int) for d in parsed_data)
 
 
 def main(stdscr):
