@@ -116,13 +116,24 @@ def test_canopen(can_bus):
         can_bus.send(msg)
         assert operator.eq(parse_canopen_message(msg), (canopen_function_codes[func_code], '0x{0:02X}'.format(node_id)))
 
+    # Set invalid node ID
+    msg = can.Message(arbitration_id=CANOPEN_TPDO1 + 128, data=data, extended_id=False)
+    can_bus.send(msg)
+    assert operator.eq(parse_canopen_message(msg), (None, None))
+
     # SDO_TX
     data = [1, 2, 3, 4, 5, 6, 7, 8]
     msg = can.Message(arbitration_id=CANOPEN_SDO_TX + 0x10, data=data, extended_id=False)
     can_bus.send(msg)
     assert operator.eq(parse_canopen_message(msg), ('SDO_TX', '0x10'))
 
+    data = [1, 2, 3, 4]  # Invalid data length
+    msg = can.Message(arbitration_id=CANOPEN_SDO_TX + 0x10, data=data, extended_id=False)
+    can_bus.send(msg)
+    assert operator.eq(parse_canopen_message(msg), (None, None))
+
     # SDO_RX
+    data = [1, 2, 3, 4, 5, 6, 7, 8]
     msg = can.Message(arbitration_id=CANOPEN_SDO_RX + 0x20, data=data, extended_id=False)
     can_bus.send(msg)
     assert operator.eq(parse_canopen_message(msg), ('SDO_RX', '0x20'))
@@ -143,6 +154,11 @@ def test_canopen(can_bus):
     msg = can.Message(arbitration_id=CANOPEN_LSS_RX, data=data, extended_id=False)
     can_bus.send(msg)
     assert operator.eq(parse_canopen_message(msg), ('LSS_RX', None))
+
+    # Send ID that does not match any of the function codes
+    msg = can.Message(arbitration_id=CANOPEN_LSS_RX + 1, data=data, extended_id=False)
+    can_bus.send(msg)
+    assert operator.eq(parse_canopen_message(msg), (None, None))
 
     # Send non-CANopen message
     msg = can.Message(arbitration_id=0x101, data=data, extended_id=False)
@@ -181,7 +197,9 @@ def test_receive(can_bus):
     while 1:
         msg = can_bus.recv(timeout=0)
         if msg is not None:
-            _id = draw_can_bus_message(None, ids, start_time, data_structs, False, msg)
+            _id = draw_can_bus_message(None, ids, start_time,
+                                       data_structs if msg.arbitration_id != 0x101 else None,
+                                       False if msg.arbitration_id != 0x123456 else True, msg)
             if _id['msg'].arbitration_id == 0x101:
                 # Check if the counter is reset when the length has changed
                 assert _id['count'] == 1
@@ -258,6 +276,13 @@ def test_pack_unpack():
     parsed_data = unpack_data(CANOPEN_TPDO2 + 2, data_structs, raw_data)
     assert parsed_data == [-2147483648, 0xFFFFFFFF]
     assert all(isinstance(d, int) for d in parsed_data)
+
+    # Make sure that the ValueError exception is raised
+    with pytest.raises(ValueError):
+        pack_data(0x101, data_structs, 1, 2, 3, 4)
+
+    with pytest.raises(ValueError):
+        unpack_data(0x102, data_structs, b'\x01\x02\x03\x04\x05\x06\x07\x08')
 
 
 def main(stdscr):
