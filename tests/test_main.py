@@ -18,7 +18,7 @@ import time
 import can
 import pytest
 
-from python_can_viewer import KEY_ESC, canopen_function_codes, draw_can_bus_message, parse_canopen_message
+from python_can_viewer import *
 
 
 @pytest.fixture(scope='module')
@@ -31,38 +31,38 @@ def can_bus():  # type: (None) -> can.Bus
 def test_canopen(can_bus):
     # NMT
     data = [2, 1]  # cmd = stop node, node ID = 1
-    msg = can.Message(arbitration_id=0x000, data=data, extended_id=False)
+    msg = can.Message(arbitration_id=CANOPEN_NMT, data=data, extended_id=False)
     can_bus.send(msg)
     assert operator.eq(parse_canopen_message(msg), ('NMT', '0x01'))
 
     data = [1, 0]  # cmd = start node, node ID = all
-    msg = can.Message(arbitration_id=0x000, data=data, extended_id=False)
+    msg = can.Message(arbitration_id=CANOPEN_NMT, data=data, extended_id=False)
     can_bus.send(msg)
     assert operator.eq(parse_canopen_message(msg), ('NMT', 'ALL'))
 
     # SYNC
-    msg = can.Message(arbitration_id=0x080 + 1, data=None, extended_id=False)   # Wrong ID
+    msg = can.Message(arbitration_id=CANOPEN_SYNC_EMCY + 1, data=None, extended_id=False)   # Wrong ID
     can_bus.send(msg)
     assert operator.eq(parse_canopen_message(msg), (None, None))
 
     data = [1, 2, 3, 4, 5, 6, 7, 8]  # Wrong length
-    msg = can.Message(arbitration_id=0x080, data=data, extended_id=False)
+    msg = can.Message(arbitration_id=CANOPEN_SYNC_EMCY, data=data, extended_id=False)
     can_bus.send(msg)
     assert operator.eq(parse_canopen_message(msg), (None, None))
 
-    msg = can.Message(arbitration_id=0x080, data=None, extended_id=False)
+    msg = can.Message(arbitration_id=CANOPEN_SYNC_EMCY, data=None, extended_id=False)
     can_bus.send(msg)
     assert operator.eq(parse_canopen_message(msg), ('SYNC', None))
 
     # EMCY
     data = [1, 2, 3, 4, 5, 6, 7]  # Wrong length
-    msg = can.Message(arbitration_id=0x080 + 1, data=data, extended_id=False)
+    msg = can.Message(arbitration_id=CANOPEN_SYNC_EMCY + 1, data=data, extended_id=False)
     can_bus.send(msg)
     tmp = parse_canopen_message(msg)
     assert operator.eq(tmp, (None, None))
 
     data = [1, 2, 3, 4, 5, 6, 7, 8]
-    msg = can.Message(arbitration_id=0x080 + 1, data=data, extended_id=False)
+    msg = can.Message(arbitration_id=CANOPEN_SYNC_EMCY + 1, data=data, extended_id=False)
     can_bus.send(msg)
     assert operator.eq(parse_canopen_message(msg), ('EMCY', '0x01'))
 
@@ -74,7 +74,7 @@ def test_canopen(can_bus):
     days, seconds = divmod(delta, one_day_seconds)
     time_struct = struct.Struct('<LH')
     data = time_struct.pack(round(seconds * 1000), int(days))
-    msg = can.Message(arbitration_id=0x100, data=data, extended_id=False)
+    msg = can.Message(arbitration_id=CANOPEN_TIME, data=data, extended_id=False)
     can_bus.send(msg)
     assert operator.eq(parse_canopen_message(msg), ('TIME', None))
 
@@ -85,7 +85,8 @@ def test_canopen(can_bus):
 
     # TPDO1, RPDO1, TPDO2, RPDO2, TPDO3, RPDO3, TPDO4, RPDO4
     data = [1, 2, 3, 4, 5, 6, 7, 8]
-    for i, func_code in enumerate([0x180, 0x200, 0x280, 0x300, 0x380, 0x400, 0x480, 0x500]):
+    for i, func_code in enumerate([CANOPEN_TPDO1, CANOPEN_RPDO1, CANOPEN_TPDO2, CANOPEN_RPDO2,
+                                   CANOPEN_TPDO3, CANOPEN_RPDO3, CANOPEN_TPDO4, CANOPEN_RPDO4]):
         node_id = i + 1
         msg = can.Message(arbitration_id=func_code + node_id, data=data, extended_id=False)
         can_bus.send(msg)
@@ -93,29 +94,29 @@ def test_canopen(can_bus):
 
     # SDO_TX
     data = [1, 2, 3, 4, 5, 6, 7, 8]
-    msg = can.Message(arbitration_id=0x580 + 0x10, data=data, extended_id=False)
+    msg = can.Message(arbitration_id=CANOPEN_SDO_TX + 0x10, data=data, extended_id=False)
     can_bus.send(msg)
     assert operator.eq(parse_canopen_message(msg), ('SDO_TX', '0x10'))
 
     # SDO_RX
-    msg = can.Message(arbitration_id=0x600 + 0x20, data=data, extended_id=False)
+    msg = can.Message(arbitration_id=CANOPEN_SDO_RX + 0x20, data=data, extended_id=False)
     can_bus.send(msg)
     assert operator.eq(parse_canopen_message(msg), ('SDO_RX', '0x20'))
 
     # HEARTBEAT
     data = [0x05]  # Operational
-    msg = can.Message(arbitration_id=0x700 + 0x7F, data=data, extended_id=False)
+    msg = can.Message(arbitration_id=CANOPEN_HEARTBEAT + 0x7F, data=data, extended_id=False)
     can_bus.send(msg)
     assert operator.eq(parse_canopen_message(msg), ('HEARTBEAT', '0x7F'))
 
     # LSS_TX
     data = [1, 2, 3, 4, 5, 6, 7, 8]
-    msg = can.Message(arbitration_id=0x7E4, data=data, extended_id=False)
+    msg = can.Message(arbitration_id=CANOPEN_LSS_TX, data=data, extended_id=False)
     can_bus.send(msg)
     assert operator.eq(parse_canopen_message(msg), ('LSS_TX', None))
 
     # LSS_RX
-    msg = can.Message(arbitration_id=0x7E5, data=data, extended_id=False)
+    msg = can.Message(arbitration_id=CANOPEN_LSS_RX, data=data, extended_id=False)
     can_bus.send(msg)
     assert operator.eq(parse_canopen_message(msg), ('LSS_RX', None))
 

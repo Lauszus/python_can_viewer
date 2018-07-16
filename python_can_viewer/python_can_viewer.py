@@ -18,31 +18,28 @@ import time
 
 from typing import Union, Dict, List
 
-# Keycodes not defined in curses
-KEY_ESC = 27
-KEY_SPACE = 32
+from . import *
 
-CANOPEN_NODE_ID_MASK = 0x07F  # Mask for extracting the CANopen node ID
-CANOPEN_FUNCTION_CODE_MASK = 0x780  # Mask for extracting the CANopen function code
-
+# CANopen function codes, all the messages except the TPDOx and RPDOx message have a fixed length according to the
+# specs,  so this is checked as well in order to varify that it is indeed a CANopen message
 canopen_function_codes = {
-    0x000: {2: 'NMT'},        # Network management (NMT) node control. The node id should not be added to this value
-    0x080: {0: 'SYNC',        # Synchronization (SYNC) protocol. The node id should not be added to this value
-            8: 'EMCY'},       # Emergency (EMCY) protocol
-    0x100: {6: 'TIME'},       # Time (TIME) protocol. The node id should not be added to this value
-    0x180: 'TPDO1',           # 1. Transmit Process Data Object (PDO)
-    0x200: 'RPDO1',           # 1. Receive Process Data Object (PDO)
-    0x280: 'TPDO2',           # 2. Transmit Process Data Object (PDO)
-    0x300: 'RPDO2',           # 2. Receive Process Data Object (PDO)
-    0x380: 'TPDO3',           # 3. Transmit Process Data Object (PDO)
-    0x400: 'RPDO3',           # 3. Receive Process Data Object (PDO)
-    0x480: 'TPDO4',           # 4. Transmit Process Data Object (PDO)
-    0x500: 'RPDO4',           # 4. Receive Process Data Object (PDO)
-    0x580: {8: 'SDO_TX'},     # Synchronization Object (SYNC) transmit
-    0x600: {8: 'SDO_RX'},     # Synchronization Object (SYNC) receive
-    0x700: {1: 'HEARTBEAT'},  # Network management (NMT) node monitoring
-    0x7E4: {8: 'LSS_TX'},     # Layer Setting Services (LSS) transmit
-    0x7E5: {8: 'LSS_RX'},     # Layer Setting Services (LSS) receive
+    CANOPEN_NMT:        {2: 'NMT'},        # Network management (NMT) node control. The node id should not be added to this value
+    CANOPEN_SYNC_EMCY:  {0: 'SYNC',        # Synchronization (SYNC) protocol. The node id should not be added to this value
+                         8: 'EMCY'},       # Emergency (EMCY) protocol
+    CANOPEN_TIME:       {6: 'TIME'},       # Time (TIME) protocol. The node id should not be added to this value
+    CANOPEN_TPDO1:          'TPDO1',       # 1. Transmit Process Data Object (PDO)
+    CANOPEN_RPDO1:          'RPDO1',       # 1. Receive Process Data Object (PDO)
+    CANOPEN_TPDO2:          'TPDO2',       # 2. Transmit Process Data Object (PDO)
+    CANOPEN_RPDO2:          'RPDO2',       # 2. Receive Process Data Object (PDO)
+    CANOPEN_TPDO3:          'TPDO3',       # 3. Transmit Process Data Object (PDO)
+    CANOPEN_RPDO3:          'RPDO3',       # 3. Receive Process Data Object (PDO)
+    CANOPEN_TPDO4:          'TPDO4',       # 4. Transmit Process Data Object (PDO)
+    CANOPEN_RPDO4:          'RPDO4',       # 4. Receive Process Data Object (PDO)
+    CANOPEN_SDO_TX:     {8: 'SDO_TX'},     # Synchronization Object (SYNC) transmit
+    CANOPEN_SDO_RX:     {8: 'SDO_RX'},     # Synchronization Object (SYNC) receive
+    CANOPEN_HEARTBEAT:  {1: 'HEARTBEAT'},  # Network management (NMT) node monitoring
+    CANOPEN_LSS_TX:     {8: 'LSS_TX'},     # Layer Setting Services (LSS) transmit
+    CANOPEN_LSS_RX:     {8: 'LSS_RX'},     # Layer Setting Services (LSS) receive
 }
 
 # Initialize the scroll variable
