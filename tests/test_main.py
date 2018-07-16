@@ -35,13 +35,28 @@ def test_canopen(can_bus):
     can_bus.send(msg)
     assert operator.eq(parse_canopen_message(msg), ('NMT', '0x01'))
 
+    msg = can.Message(arbitration_id=CANOPEN_NMT, data=data, extended_id=True)  # CANopen do not use an extended id
+    can_bus.send(msg)
+    assert operator.eq(parse_canopen_message(msg), (None, None))
+
+    # The ID is not added to the NMT function code
+    msg = can.Message(arbitration_id=CANOPEN_NMT + 1, data=data, extended_id=False)
+    can_bus.send(msg)
+    assert operator.eq(parse_canopen_message(msg), (None, None))
+
+    data = [2, 128]  # cmd = stop node, node ID = invalid id
+    msg = can.Message(arbitration_id=CANOPEN_NMT, data=data, extended_id=False)
+    can_bus.send(msg)
+    assert operator.eq(parse_canopen_message(msg), (None, None))
+
     data = [1, 0]  # cmd = start node, node ID = all
     msg = can.Message(arbitration_id=CANOPEN_NMT, data=data, extended_id=False)
     can_bus.send(msg)
     assert operator.eq(parse_canopen_message(msg), ('NMT', 'ALL'))
 
     # SYNC
-    msg = can.Message(arbitration_id=CANOPEN_SYNC_EMCY + 1, data=None, extended_id=False)   # Wrong ID
+    # The ID is not added to the SYNC function code
+    msg = can.Message(arbitration_id=CANOPEN_SYNC_EMCY + 1, data=None, extended_id=False)
     can_bus.send(msg)
     assert operator.eq(parse_canopen_message(msg), (None, None))
 
@@ -62,6 +77,10 @@ def test_canopen(can_bus):
     assert operator.eq(tmp, (None, None))
 
     data = [1, 2, 3, 4, 5, 6, 7, 8]
+    msg = can.Message(arbitration_id=CANOPEN_SYNC_EMCY + 128, data=data, extended_id=False)  # Invalid ID
+    can_bus.send(msg)
+    assert operator.eq(parse_canopen_message(msg), (None, None))
+
     msg = can.Message(arbitration_id=CANOPEN_SYNC_EMCY + 1, data=data, extended_id=False)
     can_bus.send(msg)
     assert operator.eq(parse_canopen_message(msg), ('EMCY', '0x01'))
@@ -77,6 +96,11 @@ def test_canopen(can_bus):
     msg = can.Message(arbitration_id=CANOPEN_TIME, data=data, extended_id=False)
     can_bus.send(msg)
     assert operator.eq(parse_canopen_message(msg), ('TIME', None))
+
+    # The ID is not added to the TIME function code
+    msg = can.Message(arbitration_id=CANOPEN_TIME + 1, data=data, extended_id=False)
+    can_bus.send(msg)
+    assert operator.eq(parse_canopen_message(msg), (None, None))
 
     # milliseconds, days = time_struct.unpack(data)
     # seconds = days * one_day_seconds + milliseconds / 1000.

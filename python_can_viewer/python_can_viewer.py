@@ -150,8 +150,11 @@ def parse_canopen_message(msg):
                     # then the command is sent to all nodes
                     if msg.data[1] == 0:
                         canopen_node_id_string = 'ALL'
-                    else:
+                    elif 1 <= msg.data[1] <= 127:
                         canopen_node_id_string = '0x{0:02X}'.format(msg.data[1])
+                    else:
+                        # It not a valid NMT command, as the node ID is not valid
+                        canopen_function_code_string = None
         elif (msg.arbitration_id == 0x7E4 or msg.arbitration_id == 0x7E5) and \
                 msg.dlc in canopen_function_codes[msg.arbitration_id]:
             # Check if it is the LSS commands
