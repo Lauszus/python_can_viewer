@@ -72,8 +72,8 @@ def pack_data(cmd, cmd_to_struct, *args):  # type: (Union(bytes, int), Dict, *fl
 
                 # Disable rounding if the format is a float
                 data = []
-                for c, arg, val in zip(fmt[1:], args, value[1:]):
-                    if c == ord(b'f'):
+                for c, arg, val in zip(six.iterbytes(fmt[1:]), args, value[1:]):
+                    if six.int2byte(c) == b'f':
                         data.append(arg * val)
                     else:
                         data.append(round(arg * val))
@@ -83,8 +83,8 @@ def pack_data(cmd, cmd_to_struct, *args):  # type: (Union(bytes, int), Dict, *fl
                 data = args
 
             return struct_t.pack(*data)
-
-    raise ValueError('Unknown command: 0x{:02X}'.format(six.byte2int(cmd) if isinstance(cmd, six.binary_type) else cmd))
+    else:
+        raise ValueError('Unknown command: 0x{:02X}'.format(six.byte2int(cmd) if isinstance(cmd, six.binary_type) else cmd))
 
 
 # Unpack the data and then convert it into SI-units
@@ -111,8 +111,8 @@ def unpack_data(cmd, cmd_to_struct, data):  # type: (Union(bytes, int), Dict, by
             if len(values) == 1:
                 return values[0]  # Extract the value if there is only one element in the list
             return values
-
-    raise ValueError('Unknown command: 0x{:02X}'.format(six.byte2int(cmd) if isinstance(cmd, six.binary_type) else cmd))
+    else:
+        raise ValueError('Unknown command: 0x{:02X}'.format(six.byte2int(cmd) if isinstance(cmd, six.binary_type) else cmd))
 
 
 def parse_canopen_message(msg):
