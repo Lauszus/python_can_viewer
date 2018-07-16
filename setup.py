@@ -22,6 +22,7 @@ tests_require = [
     'pytest',
     'pytest-runner',
     'coverage',
+    'codecov',
 ]
 
 extras_require = {

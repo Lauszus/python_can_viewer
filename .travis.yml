@@ -6,12 +6,6 @@ python:
   - 2.7
   - 3.6
 
-install:
-  - pip install .[test]
+install: pip install tox-travis
 
-script:
-  - coverage run setup.py test
-
-after_success:
-  - coverage report
-  - bash <(curl -s https://codecov.io/bash)
+script: tox
