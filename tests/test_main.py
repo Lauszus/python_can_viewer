@@ -141,7 +141,7 @@ def test_canopen(can_bus):
     can_bus.send(msg)
 
 
-# For converting the EMCY and HEARTBEAT
+# For converting the EMCY and HEARTBEAT messages
 data_structs = {
     0x080 + 0x01: struct.Struct('<HBLB'),
     0x700 + 0x7F: struct.Struct('<B'),
@@ -156,7 +156,22 @@ def test_receive(can_bus):
     while 1:
         msg = can_bus.recv(timeout=0)
         if msg is not None:
-            draw_can_bus_message(None, ids, start_time, data_structs, msg)
+            id = draw_can_bus_message(None, ids, start_time, data_structs, msg)
+            if id['msg'].arbitration_id == 0x101:
+                # Check if the counter is reset when the length has changed
+                assert id['count'] == 1
+            elif id['msg'].arbitration_id == 0x123456:
+                # Check if the counter is incremented
+                if id['dt'] == 0:
+                    assert id['count'] == 1
+                else:
+                    assert id['count'] == 2
+                    # dt should be ~0.1 s
+                    assert 0.09 < id['dt'] < 0.11
+            else:
+                # Make sure dt is 0
+                if id['count'] == 1:
+                    assert id['dt'] == 0
         else:
             break
 

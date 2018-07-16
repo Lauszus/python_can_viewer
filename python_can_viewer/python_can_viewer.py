@@ -163,7 +163,7 @@ def parse_canopen_message(msg):
     return canopen_function_code_string, canopen_node_id_string
 
 
-def draw_can_bus_message(stdscr, ids, start_time, data_structs, msg):
+def draw_can_bus_message(stdscr, ids, start_time, data_structs, msg, sorting=False):
     # Use the CAN-Bus ID as the key in the dict
     key = msg.arbitration_id
 
@@ -171,41 +171,42 @@ def draw_can_bus_message(stdscr, ids, start_time, data_structs, msg):
     if msg.is_extended_id:
         key |= (1 << 32)
 
-    # Check if it is a new message or if the length is not the same
     new_id_added, length_changed = False, False
-    if key not in ids:
-        new_id_added = True
-    elif msg.dlc != ids[key][2].dlc:
-        length_changed = True
+    if not sorting:
+        # Check if it is a new message or if the length is not the same
+        if key not in ids:
+            new_id_added = True
+        elif msg.dlc != ids[key]['msg'].dlc:
+            length_changed = True
 
-    if new_id_added or length_changed:
-        # Increment the index if it was just added, but keep it if the length just changed
-        row = len(ids) + 1 if new_id_added else ids[key][0]
+        if new_id_added or length_changed:
+            # Increment the index if it was just added, but keep it if the length just changed
+            row = len(ids) + 1 if new_id_added else ids[key]['row']
 
-        # It's a new message ID or the length has changed, so add it to the dict
-        # The first index is the row index, the second is the frame counter,
-        # the third is a copy of the CAN-Bus frame
-        # and the forth index is the time since the previous message
-        ids[key] = [row, 0, msg, 0]
-    else:
-        # Calculate the time since the last message and save the timestamp
-        ids[key][3] = msg.timestamp - ids[key][2].timestamp
+            # It's a new message ID or the length has changed, so add it to the dict
+            # The first index is the row index, the second is the frame counter,
+            # the third is a copy of the CAN-Bus frame
+            # and the forth index is the time since the previous message
+            ids[key] = {'row': row, 'count': 0, 'msg': msg, 'dt': 0}
+        else:
+            # Calculate the time since the last message and save the timestamp
+            ids[key]['dt'] = msg.timestamp - ids[key]['msg'].timestamp
 
-        # Copy the CAN.Bus frame - this is used for sorting
-        ids[key][2] = msg
+            # Copy the CAN.Bus frame - this is used for sorting
+            ids[key]['msg'] = msg
 
-    # Increment frame counter
-    ids[key][1] += 1
+        # Increment frame counter
+        ids[key]['count'] += 1
 
     # Sort frames based on the CAN-Bus ID if a new frame was added
     if new_id_added:
         draw_header(stdscr, data_structs)
         for i, key in enumerate(sorted(ids.keys())):
             # Set the new row index, but skip the header
-            ids[key][0] = i + 1
+            ids[key]['row'] = i + 1
 
             # Do a recursive call, so the frames are repositioned
-            draw_can_bus_message(stdscr, ids, start_time, data_structs, ids[key][2])
+            draw_can_bus_message(stdscr, ids, start_time, data_structs, ids[key]['msg'], sorting=True)
     else:
         # Format the CAN-Bus ID as a hex value
         arbitration_id_string = '0x{0:0{1}X}'.format(msg.arbitration_id, 8 if msg.is_extended_id else 3)
@@ -219,16 +220,16 @@ def draw_can_bus_message(stdscr, ids, start_time, data_structs, msg):
         canopen_function_code_string, canopen_node_id_string = parse_canopen_message(msg)
 
         # Now draw the CAN-Bus message on the terminal window
-        draw_line(stdscr, ids[key][0], 0, str(ids[key][1]))
-        draw_line(stdscr, ids[key][0], 8, '{0:.6f}'.format(ids[key][2].timestamp - start_time))
-        draw_line(stdscr, ids[key][0], 23, '{0:.6f}'.format(ids[key][3]))
-        draw_line(stdscr, ids[key][0], 35, arbitration_id_string)
-        draw_line(stdscr, ids[key][0], 47, str(msg.dlc))
-        draw_line(stdscr, ids[key][0], 52, data_string)
+        draw_line(stdscr, ids[key]['row'], 0, str(ids[key]['count']))
+        draw_line(stdscr, ids[key]['row'], 8, '{0:.6f}'.format(ids[key]['msg'].timestamp - start_time))
+        draw_line(stdscr, ids[key]['row'], 23, '{0:.6f}'.format(ids[key]['dt']))
+        draw_line(stdscr, ids[key]['row'], 35, arbitration_id_string)
+        draw_line(stdscr, ids[key]['row'], 47, str(msg.dlc))
+        draw_line(stdscr, ids[key]['row'], 52, data_string)
         if canopen_function_code_string:
-            draw_line(stdscr, ids[key][0], 77, canopen_function_code_string)
+            draw_line(stdscr, ids[key]['row'], 77, canopen_function_code_string)
         if canopen_node_id_string:
-            draw_line(stdscr, ids[key][0], 88, canopen_node_id_string)
+            draw_line(stdscr, ids[key]['row'], 88, canopen_node_id_string)
 
         if data_structs:
             try:
@@ -238,11 +239,11 @@ def draw_can_bus_message(stdscr, ids, start_time, data_structs, msg):
                 except TypeError:
                     # The data was not iterable fx a single int
                     values_string = str(data)
-                draw_line(stdscr, ids[key][0], 97, values_string)
+                draw_line(stdscr, ids[key]['row'], 97, values_string)
             except (ValueError, struct.error):
                 pass
 
-    return ids[key][0]
+    return ids[key]
 
 
 def draw_line(stdscr, row, col, txt, *args):  # pragma: no cover
@@ -283,7 +284,7 @@ def redraw_screen(stdscr, ids, start_time, data_structs):  # pragma: no cover
     # Trigger a complete redraw
     draw_header(stdscr, data_structs)
     for key in ids.keys():
-        draw_can_bus_message(stdscr, ids, start_time, data_structs, ids[key][2])
+        draw_can_bus_message(stdscr, ids, start_time, data_structs, ids[key]['msg'])
 
 
 def main(stdscr):  # pragma: no cover
