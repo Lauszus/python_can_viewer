@@ -42,7 +42,7 @@ setup(
     include_package_data=True,
     zip_safe=False,
     python_requires='>=2.7',
-    install_requires=['python-can', 'six', 'typing'],
+    install_requires=['python-can>=2.0.0', 'six', 'typing'],
     extras_require=extras_require,
     tests_require=tests_require,
     classifiers=(
