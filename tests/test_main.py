@@ -8,15 +8,14 @@
 # Web      :  http://www.lauszus.com
 # e-mail   :  lauszus@gmail.com
 
+import can
 import curses
 import datetime
 import operator
+import pytest
 import struct
 import sys
 import time
-
-import can
-import pytest
 
 from python_can_viewer import *
 
@@ -167,41 +166,59 @@ def test_canopen(can_bus):
     can_bus.send(msg)
 
 
-# For converting the EMCY and HEARTBEAT messages
-data_structs = {
-    0x080 + 0x01: struct.Struct('<HBLB'),
-    0x700 + 0x7F: struct.Struct('<B'),
-}
-
-
 def test_receive(can_bus):
     ids = {}
     start_time = time.time()
+    data_structs = {
+        # For converting the EMCY and HEARTBEAT messages
+        0x080 + 0x01: struct.Struct('<HBLB'),
+        0x700 + 0x7F: struct.Struct('<B'),
 
+        # Big-endian and float test
+        0x123456: struct.Struct('>ff'),
+    }
     # Receive the messages we just sent in 'test_canopen'
     while 1:
         msg = can_bus.recv(timeout=0)
         if msg is not None:
-            id = draw_can_bus_message(None, ids, start_time, data_structs, msg)
-            if id['msg'].arbitration_id == 0x101:
+            _id = draw_can_bus_message(None, ids, start_time, data_structs, False, msg)
+            if _id['msg'].arbitration_id == 0x101:
                 # Check if the counter is reset when the length has changed
-                assert id['count'] == 1
-            elif id['msg'].arbitration_id == 0x123456:
+                assert _id['count'] == 1
+            elif _id['msg'].arbitration_id == 0x123456:
                 # Check if the counter is incremented
-                if id['dt'] == 0:
-                    assert id['count'] == 1
+                if _id['dt'] == 0:
+                    assert _id['count'] == 1
                 else:
-                    assert id['count'] == 2
-                    assert pytest.approx(id['dt'], 0.1)  # dt should be ~0.1 s
+                    assert _id['count'] == 2
+                    assert pytest.approx(_id['dt'], 0.1)  # dt should be ~0.1 s
             else:
                 # Make sure dt is 0
-                if id['count'] == 1:
-                    assert id['dt'] == 0
+                if _id['count'] == 1:
+                    assert _id['dt'] == 0
         else:
             break
 
 
 def test_pack_unpack():
+    # Dictionary used to convert between Python values and C structs represented as Python strings.
+    # If the value is 'None' then the message does not contain any data package.
+    #
+    # The struct package is used to unpack the received data.
+    # Note the data is assumed to be in little-endian byte order.
+    # < = little-endian, > = big-endian
+    # x = pad byte
+    # c = char
+    # ? = bool
+    # b = int8_t, B = uint8_t
+    # h = int16, H = uint16
+    # l = int32_t, L = uint32_t
+    # q = int64_t, Q = uint64_t
+    # f = float (32-bits), d = double (64-bits)
+    #
+    # An optional conversion from real units to integers can be given as additional arguments.
+    # In order to convert from raw integer value the SI-units are multiplied with the values and similarly the values
+    # are divided by the value in order to convert from real units to raw integer values.
     data_structs = {
         # CANopen node 1
         CANOPEN_TPDO1 + 1: struct.Struct('<bBh2H'),
@@ -244,11 +261,6 @@ def test_pack_unpack():
 
 
 def main(stdscr):
-    # Used to automatically break out after the messages has been sent
-    wait_for_quit = True
-    if len(sys.argv) > 1:
-        wait_for_quit = sys.argv[1].lower() != 'false' and sys.argv[1] != '0'
-
     # Create a CAN-Bus interface
     can_bus = can.interface.Bus(channel='can0', bustype='virtual', receive_own_messages=True)
 
@@ -267,10 +279,7 @@ def main(stdscr):
         # Receive the messages we just sent
         msg = can_bus.recv(timeout=0)
         if msg is not None:
-            draw_can_bus_message(stdscr, ids, start_time, data_structs, msg)
-        elif not wait_for_quit:
-            # Automatically exit when we are finished reading
-            break
+            draw_can_bus_message(stdscr, ids, start_time, None, False, msg)
         else:  # pragma: no cover
             # Read the terminal input
             key = stdscr.getch()
