@@ -8,17 +8,20 @@
 # Web      :  http://www.lauszus.com
 # e-mail   :  lauszus@gmail.com
 
+import argparse
 import can
 import curses
+import datetime
 import math
+import socket
 import six
 import struct
-import sys
 import time
 
 from typing import Union, Dict, List
 
 from . import *
+from . import __version__
 
 # CANopen function codes, all the messages except the TPDOx and RPDOx message have a fixed length according to the
 # specs,  so this is checked as well in order to varify that it is indeed a CANopen message
@@ -293,12 +296,8 @@ def redraw_screen(stdscr, ids, start_time, data_structs):  # pragma: no cover
         draw_can_bus_message(stdscr, ids, start_time, data_structs, ids[key]['msg'])
 
 
-def main(stdscr):  # pragma: no cover
+def view(stdscr, can_bus):  # pragma: no cover
     global scroll
-
-    channel = 'can0'  # Use the first interface by default
-    if len(sys.argv) > 1:
-        channel = str(sys.argv[1])  # The CAN-Bus channel is given as an argument
 
     # Dictionary used to convert between Python values and C structs represented as Python strings.
     # If the value is 'None' then the message does not contain any data package.
@@ -320,9 +319,6 @@ def main(stdscr):  # pragma: no cover
     # are divided by the value in order to convert from SI-units to raw integer values.
     data_structs = {
     }  # type: Dict[Union[bytes, Tuple[bytes, ...]], Union[struct.Struct, Tuple, None]]
-
-    # Create a CAN-Bus interface
-    can_bus = can.interface.Bus(channel=channel, bustype='socketcan')
 
     # Do not wait for key inputs and disable the cursor
     stdscr.nodelay(True)
@@ -385,10 +381,67 @@ def main(stdscr):  # pragma: no cover
             curses.resizeterm(y, x)
             redraw_screen(stdscr, ids, start_time, data_structs)
 
+    # Shutdown the CAN-Bus interface
+    can_bus.shutdown()
+
+
+def main():  # pragma: no cover
+    # Parse command line arguments
+    parser = argparse.ArgumentParser('python -m python_can_viewer',
+                                     description='A simple CAN viewer terminal application written in Python')
+
+    parser.add_argument('--version', action='version',
+                        version='%(prog)s (version {version})'.format(version=__version__))
+
+    # Copied from: https://github.com/hardbyte/python-can/blob/develop/can/logger.py
+    parser.add_argument('-b', '--bitrate', type=int, help='''bitrate to use for the CAN bus.''')
+
+    parser.add_argument('-c', '--channel', help='''most backend interfaces require some sort of channel.
+                for example with the serial interface the channel might be a rfcomm device: "/dev/rfcomm0"
+                with the socketcan interfaces valid channel examples include: "can0", "vcan0"
+                (default: "can0")''', default='can0')
+
+    parser.add_argument('-f', '--filter', help='''comma separated filters can be specified for the given CAN interface:
+                        <can_id>:<can_mask> (matches when <received_can_id> & mask == can_id & mask)
+                        <can_id>~<can_mask> (matches when <received_can_id> & mask != can_id & mask)
+                    ''', nargs=argparse.REMAINDER, default='')
+
+    parser.add_argument('-i', '--interface', dest='interface',
+                        help='''specify the backend CAN interface to use. (default: "socketcan").
+                        Availble interface are: ''' + ', '.join('"' + str(i) + '"' for i in can.VALID_INTERFACES),
+                        default='socketcan')
+
+    args = parser.parse_args()
+
+    can_filters = []
+    if len(args.filter) > 0:
+        # print('Adding filter/s', args.filter)
+        for filt in args.filter:
+            if ':' in filt:
+                _ = filt.split(':')
+                can_id, can_mask = int(_[0], base=16), int(_[1], base=16)
+            elif '~' in filt:
+                can_id, can_mask = filt.split('~')
+                can_id = int(can_id, base=16) | 0x20000000  # CAN_INV_FILTER
+                can_mask = int(can_mask, base=16) & socket.CAN_ERR_FLAG
+            can_filters.append({'can_id': can_id, 'can_mask': can_mask})
+
+    config = {'can_filters': can_filters}
+    if args.interface:
+        config['bustype'] = args.interface
+    if args.bitrate:
+        config['bitrate'] = args.bitrate
+
+    # Create a CAN-Bus interface
+    can_bus = can.interface.Bus(args.channel, **config)
+    # print('Connected to {}: {}'.format(can_bus.__class__.__name__, can_bus.channel_info))
+
+    curses.wrapper(view, can_bus)
+
 
 if __name__ == '__main__':  # pragma: no cover
     # Catch ctrl+c
     try:
-        curses.wrapper(main)
+        main()
     except KeyboardInterrupt:
         pass

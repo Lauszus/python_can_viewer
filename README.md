@@ -24,12 +24,6 @@ To run the script simply execute:
 python -m python_can_viewer
 ```
 
-By default it will be using the ```can0``` interface. The interface can be specified as the first argument, for instance to use ```can1```:
-
-```bash
-python -m python_can_viewer can1
-```
-
 A screenshot of the application can be seen below:
 
 <img src="screenshot.png" width=400/>
@@ -37,6 +31,43 @@ A screenshot of the application can be seen below:
 The first column is the number of times a frame with the particular ID has been received, next is the timestamp of the frame relative to when the script was started. The third column is the time between the current frame relative to the previous one. Next is the length of the frame and then the data.
 
 The last two columns are the decoded CANopen function code and node ID. If CANopen is not used, then they can simply be ignored.
+
+### Command line arguments
+
+By default it will be using the ```can0``` channel and the ```socketcan``` interface. However these can be specified using the ```-c``` and ```-i``` flag respectively.
+
+The full usage page can be seen below:
+
+```
+usage: python -m python_can_viewer [-h] [--version] [-b BITRATE] [-c CHANNEL]
+                                   [-f ...] [-i INTERFACE]
+
+A simple CAN viewer terminal application written in Python
+
+optional arguments:
+  -h, --help            show this help message and exit
+  --version             show program's version number and exit
+  -b BITRATE, --bitrate BITRATE
+                        bitrate to use for the CAN bus.
+  -c CHANNEL, --channel CHANNEL
+                        most backend interfaces require some sort of channel.
+                        for example with the serial interface the channel
+                        might be a rfcomm device: "/dev/rfcomm0" with the
+                        socketcan interfaces valid channel examples include:
+                        "can0", "vcan0" (default: "can0")
+  -f ..., --filter ...  comma separated filters can be specified for the given
+                        CAN interface: <can_id>:<can_mask> (matches when
+                        <received_can_id> & mask == can_id & mask)
+                        <can_id>~<can_mask> (matches when <received_can_id> &
+                        mask != can_id & mask)
+  -i INTERFACE, --interface INTERFACE
+                        specify the backend CAN interface to use. (default:
+                        "socketcan"). Availble interface are: "kvaser",
+                        "vector", "iscan", "socketcan", "usb2can",
+                        "socketcan_ctypes", "ixxat", "pcan", "serial",
+                        "virtual", "neovi", "slcan", "socketcan_native",
+                        "nican"
+```
 
 ### Shortcuts
 

@@ -25,6 +25,7 @@ from python_can_viewer import *
 def can_bus():  # type: (None) -> can.Bus
     _can_bus = can.interface.Bus(channel='can0', bustype='virtual', receive_own_messages=True)
     yield _can_bus
+    _can_bus.shutdown()
 
 
 # noinspection PyShadowingNames
