@@ -40,33 +40,68 @@ The full usage page can be seen below:
 
 ```
 usage: python -m python_can_viewer [-h] [--version] [-b BITRATE] [-c CHANNEL]
-                                   [-f ...] [-i INTERFACE]
+                                   [-d {<id>:<format>,<id>:<format>:<scaling1>:...:<scalingN>,file.txt}]
+                                   [-f {<can_id>:<can_mask>,<can_id>~<can_mask>}]
+                                   [-i {iscan,ixxat,kvaser,neovi,nican,pcan,serial,slcan,socketcan,socketcan_ctypes,socketcan_native,usb2can,vector,virtual}]
+                                   [--ignore-canopen]
 
 A simple CAN viewer terminal application written in Python
 
 optional arguments:
-  -h, --help            show this help message and exit
-  --version             show program's version number and exit
-  -b BITRATE, --bitrate BITRATE
-                        bitrate to use for the CAN bus.
-  -c CHANNEL, --channel CHANNEL
-                        most backend interfaces require some sort of channel.
+  -h, --help            Show this help message and exit
+  --version             Show program's version number and exit
+  -b, --bitrate BITRATE
+                        Bitrate to use for the given CAN interface
+  -c, --channel CHANNEL
+                        Most backend interfaces require some sort of channel.
                         for example with the serial interface the channel
                         might be a rfcomm device: "/dev/rfcomm0" with the
                         socketcan interfaces valid channel examples include:
-                        "can0", "vcan0" (default: "can0")
-  -f ..., --filter ...  comma separated filters can be specified for the given
-                        CAN interface: <can_id>:<can_mask> (matches when
-                        <received_can_id> & mask == can_id & mask)
-                        <can_id>~<can_mask> (matches when <received_can_id> &
-                        mask != can_id & mask)
-  -i INTERFACE, --interface INTERFACE
-                        specify the backend CAN interface to use. (default:
-                        "socketcan"). Availble interface are: "kvaser",
-                        "vector", "iscan", "socketcan", "usb2can",
-                        "socketcan_ctypes", "ixxat", "pcan", "serial",
-                        "virtual", "neovi", "slcan", "socketcan_native",
-                        "nican"
+                        "can0", "vcan0". (default: "can0")
+  -d, --decode {<id>:<format>,<id>:<format>:<scaling1>:...:<scalingN>,file.txt}
+                        Specify how to convert the raw bytes into real values.
+                        The ID of the frame is given as the first argument and the format as the second.
+                        The Python struct package is used to unpack the received data
+                        where the format characters have the following meaning:
+                              < = little-endian, > = big-endian
+                              x = pad byte
+                              c = char
+                              ? = bool
+                              b = int8_t, B = uint8_t
+                              h = int16, H = uint16
+                              l = int32_t, L = uint32_t
+                              q = int64_t, Q = uint64_t
+                              f = float (32-bits), d = double (64-bits)
+                        Fx to convert six bytes with ID 0x100 into uint8_t, uint16 and uint32_t:
+                          $ python -m python_can_viewer -d "100:<BHL"
+                        Note that the IDs are always interpreted as hex values.
+                        An optional conversion from integers to real units can be given
+                        as additional arguments. In order to convert from raw integer
+                        values the values are multiplied with the corresponding scaling value,
+                        similarly the values are divided by the scaling value in order
+                        to convert from real units to raw integer values.
+                        Fx lets say the uint8_t needs no conversion, but the uint16 and the uint32_t
+                        needs to be divided by 10 and 100 respectively:
+                          $ python -m python_can_viewer -d "101:<BHL:1:10.0:100.0"
+                        Be aware that integer division is performed if the scaling value is an integer.
+                        Multiple arguments are separated by spaces:
+                          $ python -m python_can_viewer -d "100:<BHL" "101:<BHL:1:10.0:100.0"
+                        Alternatively a file containing the conversion strings separated by new lines
+                        can be given as input:
+                          $ cat file.txt
+                              100:<BHL
+                              101:<BHL:1:10.0:100.0
+                          $ python -m python_can_viewer -d file.txt
+  -f, --filter {<can_id>:<can_mask>,<can_id>~<can_mask>}
+                        Comma separated CAN filters for the given CAN interface:
+                              <can_id>:<can_mask> (matches when <received_can_id> & mask == can_id & mask)
+                              <can_id>~<can_mask> (matches when <received_can_id> & mask != can_id & mask)
+                        Fx to show only frames with ID 0x100 to 0x103:
+                              python -m python_can_viewer -f 100:7FC
+                        Note that the ID and mask are alway interpreted as hex values
+  -i, --interface {iscan,ixxat,kvaser,neovi,nican,pcan,serial,slcan,socketcan,socketcan_ctypes,socketcan_native,usb2can,vector,virtual}
+                        Specify the backend CAN interface to use. (default: "socketcan")
+  --ignore-canopen      Do not print CANopen information
 ```
 
 ### Shortcuts
