@@ -1,0 +1,11 @@
+coverage:
+  status:
+    project:
+      default:
+        threshold: 3
+    patch:
+      default:
+        threshold: 3
+
+comment:
+  layout: diff, files
