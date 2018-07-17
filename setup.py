@@ -35,6 +35,7 @@ setup(
     url='https://github.com/Lauszus/python_can_viewer',
     description='A simple CAN viewer terminal application written in Python',
     long_description=long_description,
+    long_description_content_type='text/markdown',
     version=version,
     packages=find_packages(),
     author='Kristian Sloth Lauszus',
