@@ -5,13 +5,11 @@ language: python
 python:
   - 2.7
   - 3.6
+  - "pypy"
+  - "pypy3"
 
-install:
-  - pip install -r requirements.txt
+install: pip install tox-travis
 
-script:
-  - coverage run tests.py false
+script: tox
 
-after_success:
-  - coverage report
-  - bash <(curl -s https://codecov.io/bash)
+after_success: tox -e codecov

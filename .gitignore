@@ -1,7 +1,12 @@
 *.pyc
 .idea/
-venv/
+venv*/
 .pytest_cache/
 htmlcov/
 .coverage*
 !.coveragerc
+.eggs/
+*.egg-info/
+build/
+dist/
+.tox/
