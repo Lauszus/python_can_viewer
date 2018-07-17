@@ -2,10 +2,11 @@ environment:
   matrix:
     - TOXENV: "py27"
     - TOXENV: "py36"
-    - TOXENV: "pypy"
+    # Not supported by windows-curses
+    # - TOXENV: "pypy"
 
 install:
-  - if "%TOXENV%" == "pypy" choco install python.pypy;
+  # - if "%TOXENV%" == "pypy" choco install python.pypy;
   - pip install tox
 
 build: false  # Not a C# project, build stuff at the test step instead
