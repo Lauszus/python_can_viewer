@@ -275,7 +275,10 @@ def test_pack_unpack():
     raw_data = pack_data(CANOPEN_TPDO2 + 2, data_structs, -2147483648, 0xFFFFFFFF)
     parsed_data = unpack_data(CANOPEN_TPDO2 + 2, data_structs, raw_data)
     assert parsed_data == [-2147483648, 0xFFFFFFFF]
-    assert all(isinstance(d, int) for d in parsed_data)
+
+    # See: http://python-future.org/compatible_idioms.html#long-integers
+    from past.builtins import long
+    assert all(isinstance(d, (int, long)) for d in parsed_data)
 
     # Make sure that the ValueError exception is raised
     with pytest.raises(ValueError):

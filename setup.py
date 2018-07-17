@@ -19,6 +19,7 @@ with open('README.md', 'r') as f:
     long_description = f.read()
 
 tests_require = [
+    'future',
     'pytest',
     'pytest-runner',
     'coverage',
@@ -42,7 +43,7 @@ setup(
     include_package_data=True,
     zip_safe=False,
     python_requires='>=2.7',
-    install_requires=['python-can>=2.0.0', 'six', 'typing'],
+    install_requires=['python-can>=2.0.0', 'six', 'typing', 'windows-curses;platform_system=="Windows"'],
     extras_require=extras_require,
     tests_require=tests_require,
     classifiers=(
