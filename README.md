@@ -27,7 +27,7 @@ python -m python_can_viewer
 
 A screenshot of the application can be seen below:
 
-<img src="screenshot.png" width=400/>
+<img src="https://github.com/Lauszus/python_can_viewer/raw/master/screenshot.png" width=400/>
 
 The first column is the number of times a frame with the particular ID has been received, next is the timestamp of the frame relative to when the script was started. The third column is the time between the current frame relative to the previous one. Next is the length of the frame and then the data.
 
