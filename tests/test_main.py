@@ -202,7 +202,7 @@ def test_receive(can_bus):
                 start_time = msg.timestamp
             _id = draw_can_bus_message(None, ids, start_time,
                                        data_structs if msg.arbitration_id != 0x101 else None,
-                                       False if msg.arbitration_id != 0x123456 else True, msg)
+                                       False if msg.arbitration_id != 0x123456 else True, 0, msg)
             if _id['msg'].arbitration_id == 0x101:
                 # Check if the counter is reset when the length has changed
                 assert _id['count'] == 1
@@ -313,7 +313,7 @@ def main(stdscr):
             # Set the start time when the first message has been received
             if not start_time:
                 start_time = msg.timestamp
-            draw_can_bus_message(stdscr, ids, start_time, None, False, msg)
+            draw_can_bus_message(stdscr, ids, start_time, None, False, 0, msg)
         else:  # pragma: no cover
             # Read the terminal input
             key = stdscr.getch()

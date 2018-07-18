@@ -71,9 +71,6 @@ canopen_function_codes = {
     CANOPEN_LSS_RX:     {8: 'LSS_RX'},     # Layer Setting Services (LSS) receive
 }
 
-# Initialize the scroll variable
-scroll = 0
-
 
 # Convert it into raw integer values and then pack the data
 def pack_data(cmd, cmd_to_struct, *args):  # type: (Union(bytes, int), Dict, *float) -> bytes
@@ -192,7 +189,7 @@ def parse_canopen_message(msg):
     return canopen_function_code_string, canopen_node_id_string
 
 
-def draw_can_bus_message(stdscr, ids, start_time, data_structs, ignore_canopen, msg, sorting=False):
+def draw_can_bus_message(stdscr, ids, start_time, data_structs, ignore_canopen, scroll, msg, sorting=False):
     # Use the CAN-Bus ID as the key in the dict
     key = msg.arbitration_id
 
@@ -229,13 +226,13 @@ def draw_can_bus_message(stdscr, ids, start_time, data_structs, ignore_canopen, 
 
     # Sort frames based on the CAN-Bus ID if a new frame was added
     if new_id_added:
-        draw_header(stdscr, data_structs, ignore_canopen)
+        draw_header(stdscr, data_structs, ignore_canopen, scroll)
         for i, key in enumerate(sorted(ids.keys())):
             # Set the new row index, but skip the header
             ids[key]['row'] = i + 1
 
             # Do a recursive call, so the frames are repositioned
-            draw_can_bus_message(stdscr, ids, start_time, data_structs, ignore_canopen, ids[key]['msg'], sorting=True)
+            draw_can_bus_message(stdscr, ids, start_time, data_structs, ignore_canopen, scroll, ids[key]['msg'], sorting=True)
     else:
         # Format the CAN-Bus ID as a hex value
         arbitration_id_string = '0x{0:0{1}X}'.format(msg.arbitration_id, 8 if msg.is_extended_id else 3)
@@ -252,16 +249,16 @@ def draw_can_bus_message(stdscr, ids, start_time, data_structs, ignore_canopen, 
             canopen_function_code_string, canopen_node_id_string = parse_canopen_message(msg)
 
         # Now draw the CAN-Bus message on the terminal window
-        draw_line(stdscr, ids[key]['row'], 0, str(ids[key]['count']))
-        draw_line(stdscr, ids[key]['row'], 8, '{0:.6f}'.format(ids[key]['msg'].timestamp - start_time))
-        draw_line(stdscr, ids[key]['row'], 23, '{0:.6f}'.format(ids[key]['dt']))
-        draw_line(stdscr, ids[key]['row'], 35, arbitration_id_string)
-        draw_line(stdscr, ids[key]['row'], 47, str(msg.dlc))
-        draw_line(stdscr, ids[key]['row'], 52, data_string)
+        draw_line(stdscr, ids[key]['row'], 0, scroll, str(ids[key]['count']))
+        draw_line(stdscr, ids[key]['row'], 8, scroll, '{0:.6f}'.format(ids[key]['msg'].timestamp - start_time))
+        draw_line(stdscr, ids[key]['row'], 23, scroll, '{0:.6f}'.format(ids[key]['dt']))
+        draw_line(stdscr, ids[key]['row'], 35, scroll, arbitration_id_string)
+        draw_line(stdscr, ids[key]['row'], 47, scroll, str(msg.dlc))
+        draw_line(stdscr, ids[key]['row'], 52, scroll, data_string)
         if canopen_function_code_string:
-            draw_line(stdscr, ids[key]['row'], 77, canopen_function_code_string)
+            draw_line(stdscr, ids[key]['row'], 77, scroll, canopen_function_code_string)
         if canopen_node_id_string:
-            draw_line(stdscr, ids[key]['row'], 88, canopen_node_id_string)
+            draw_line(stdscr, ids[key]['row'], 88, scroll, canopen_node_id_string)
 
         if data_structs:
             try:
@@ -277,18 +274,16 @@ def draw_can_bus_message(stdscr, ids, start_time, data_structs, ignore_canopen, 
                 except TypeError:
                     # The data was not iterable fx a single int
                     values_string = str(data)
-                draw_line(stdscr, ids[key]['row'], 97 - (20 if ignore_canopen else 0), values_string)
+                draw_line(stdscr, ids[key]['row'], 97 - (20 if ignore_canopen else 0), scroll, values_string)
             except (ValueError, struct.error):
                 pass
 
     return ids[key]
 
 
-def draw_line(stdscr, row, col, txt, *args):  # pragma: no cover
+def draw_line(stdscr, row, col, scroll, txt, *args):  # pragma: no cover
     if not stdscr:
         return  # Used when testing
-
-    global scroll
 
     if row - scroll < 0:
         # Skip if we have scrolled passed the line
@@ -301,34 +296,32 @@ def draw_line(stdscr, row, col, txt, *args):  # pragma: no cover
         pass
 
 
-def draw_header(stdscr, data_structs, ignore_canopen):  # pragma: no cover
+def draw_header(stdscr, data_structs, ignore_canopen, scroll):  # pragma: no cover
     if not stdscr:
         return  # Used when testing
 
     stdscr.clear()
-    draw_line(stdscr, 0, 0, 'Count', curses.A_BOLD)
-    draw_line(stdscr, 0, 8, 'Time', curses.A_BOLD)
-    draw_line(stdscr, 0, 23, 'dt', curses.A_BOLD)
-    draw_line(stdscr, 0, 35, 'ID', curses.A_BOLD)
-    draw_line(stdscr, 0, 47, 'DLC', curses.A_BOLD)
-    draw_line(stdscr, 0, 52, 'Data', curses.A_BOLD)
+    draw_line(stdscr, 0, 0, scroll, 'Count', curses.A_BOLD)
+    draw_line(stdscr, 0, 8, scroll, 'Time', curses.A_BOLD)
+    draw_line(stdscr, 0, 23, scroll, 'dt', curses.A_BOLD)
+    draw_line(stdscr, 0, 35, scroll, 'ID', curses.A_BOLD)
+    draw_line(stdscr, 0, 47, scroll, 'DLC', curses.A_BOLD)
+    draw_line(stdscr, 0, 52, scroll, 'Data', curses.A_BOLD)
     if not ignore_canopen:
-        draw_line(stdscr, 0, 77, 'Func code', curses.A_BOLD)
-        draw_line(stdscr, 0, 88, 'Node ID', curses.A_BOLD)
+        draw_line(stdscr, 0, 77, scroll, 'Func code', curses.A_BOLD)
+        draw_line(stdscr, 0, 88, scroll, 'Node ID', curses.A_BOLD)
     if data_structs:  # Only draw if the dictionary is not empty
-        draw_line(stdscr, 0, 97 - (20 if ignore_canopen else 0), 'Parsed values', curses.A_BOLD)
+        draw_line(stdscr, 0, 97 - (20 if ignore_canopen else 0), scroll, 'Parsed values', curses.A_BOLD)
 
 
-def redraw_screen(stdscr, ids, start_time, data_structs, ignore_canopen):  # pragma: no cover
+def redraw_screen(stdscr, ids, start_time, data_structs, ignore_canopen, scroll):  # pragma: no cover
     # Trigger a complete redraw
-    draw_header(stdscr, data_structs, ignore_canopen)
+    draw_header(stdscr, data_structs, ignore_canopen, scroll)
     for key in ids.keys():
-        draw_can_bus_message(stdscr, ids, start_time, data_structs, ignore_canopen, ids[key]['msg'])
+        draw_can_bus_message(stdscr, ids, start_time, data_structs, ignore_canopen, scroll, ids[key]['msg'])
 
 
 def view(stdscr, can_bus, data_structs, ignore_canopen):  # pragma: no cover
-    global scroll
-
     # Do not wait for key inputs and disable the cursor
     stdscr.nodelay(True)
     curses.curs_set(0)
@@ -336,15 +329,14 @@ def view(stdscr, can_bus, data_structs, ignore_canopen):  # pragma: no cover
     # Get the window dimensions - used for resizing the window
     y, x = stdscr.getmaxyx()
 
-    # Clear the terminal and draw the headers
-    draw_header(stdscr, data_structs, ignore_canopen)
-
-    # Used for pausing the viewer
-    paused = False
-
-    # Initialise the ID dictionary and the start timestamp
+    # Initialise the ID dictionary, start timestamp, scroll and variable for pausing the viewer
     ids = {}
     start_time = None
+    scroll = 0
+    paused = False
+
+    # Clear the terminal and draw the headers
+    draw_header(stdscr, data_structs, ignore_canopen, scroll)
 
     while 1:
         # Do not read the CAN-Bus when in paused mode
@@ -355,7 +347,7 @@ def view(stdscr, can_bus, data_structs, ignore_canopen):  # pragma: no cover
                 # Set the start time when the first message has been received
                 if not start_time:
                     start_time = msg.timestamp
-                draw_can_bus_message(stdscr, ids, start_time, data_structs, ignore_canopen, msg)
+                draw_can_bus_message(stdscr, ids, start_time, data_structs, ignore_canopen, scroll, msg)
 
         # Read the terminal input
         key = stdscr.getch()
@@ -368,7 +360,7 @@ def view(stdscr, can_bus, data_structs, ignore_canopen):  # pragma: no cover
         elif key == ord('c'):
             ids = {}
             scroll = 0
-            draw_header(stdscr, data_structs, ignore_canopen)
+            draw_header(stdscr, data_structs, ignore_canopen, scroll)
 
         # Pause by pressing space
         elif key == KEY_SPACE:
@@ -379,19 +371,19 @@ def view(stdscr, can_bus, data_structs, ignore_canopen):  # pragma: no cover
             # Limit scrolling, so the user can do scroll passed the header
             if scroll > 0:
                 scroll -= 1
-                redraw_screen(stdscr, ids, start_time, data_structs, ignore_canopen)
+                redraw_screen(stdscr, ids, start_time, data_structs, ignore_canopen, scroll)
         elif key == curses.KEY_DOWN:
             # Limit scrolling, so the maximum scrolling position is one below the last line
             if scroll <= len(ids) - y + 1:
                 scroll += 1
-                redraw_screen(stdscr, ids, start_time, data_structs, ignore_canopen)
+                redraw_screen(stdscr, ids, start_time, data_structs, ignore_canopen, scroll)
 
         # Check if screen was resized
         resize = curses.is_term_resized(y, x)
         if resize is True:
             y, x = stdscr.getmaxyx()
             curses.resizeterm(y, x)
-            redraw_screen(stdscr, ids, start_time, data_structs, ignore_canopen)
+            redraw_screen(stdscr, ids, start_time, data_structs, ignore_canopen, scroll)
 
     # Shutdown the CAN-Bus interface
     can_bus.shutdown()
