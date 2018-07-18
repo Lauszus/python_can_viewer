@@ -12,9 +12,9 @@ import can
 import curses
 import datetime
 import operator
+import math
 import pytest
 import struct
-import sys
 import time
 
 from python_can_viewer import *
