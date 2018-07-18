@@ -277,7 +277,7 @@ def draw_can_bus_message(stdscr, ids, start_time, data_structs, ignore_canopen, 
                 except TypeError:
                     # The data was not iterable fx a single int
                     values_string = str(data)
-                draw_line(stdscr, ids[key]['row'], 97, values_string)
+                draw_line(stdscr, ids[key]['row'], 97 - (20 if ignore_canopen else 0), values_string)
             except (ValueError, struct.error):
                 pass
 
@@ -316,7 +316,7 @@ def draw_header(stdscr, data_structs, ignore_canopen):  # pragma: no cover
         draw_line(stdscr, 0, 77, 'Func code', curses.A_BOLD)
         draw_line(stdscr, 0, 88, 'Node ID', curses.A_BOLD)
     if data_structs:  # Only draw if the dictionary is not empty
-        draw_line(stdscr, 0, 97, 'Parsed values', curses.A_BOLD)
+        draw_line(stdscr, 0, 97 - (20 if ignore_canopen else 0), 'Parsed values', curses.A_BOLD)
 
 
 def redraw_screen(stdscr, ids, start_time, data_structs, ignore_canopen):  # pragma: no cover
