@@ -40,7 +40,7 @@ By default it will be using the ```can0``` channel and the ```socketcan``` inter
 The full usage page can be seen below:
 
 ```
-usage: python -m python_can_viewer [-h] [--version] [-b BITRATE] [-c CHANNEL]
+Usage: python -m python_can_viewer [-h] [--version] [-b BITRATE] [-c CHANNEL]
                                    [-d {<id>:<format>,<id>:<format>:<scaling1>:...:<scalingN>,file.txt}]
                                    [-f {<can_id>:<can_mask>,<can_id>~<can_mask>}]
                                    [-i {iscan,ixxat,kvaser,neovi,nican,pcan,serial,slcan,socketcan,socketcan_ctypes,socketcan_native,usb2can,vector,virtual}]
@@ -48,7 +48,7 @@ usage: python -m python_can_viewer [-h] [--version] [-b BITRATE] [-c CHANNEL]
 
 A simple CAN viewer terminal application written in Python
 
-optional arguments:
+Optional arguments:
   -h, --help            Show this help message and exit
   --version             Show program's version number and exit
   -b, --bitrate BITRATE
