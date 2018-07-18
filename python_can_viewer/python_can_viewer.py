@@ -18,7 +18,6 @@ import socket
 import six
 import struct
 import sys
-import time
 
 from typing import Union, Dict, List
 
@@ -320,7 +319,7 @@ def view(stdscr, can_bus, data_structs, ignore_canopen):  # pragma: no cover
 
     # Initialise the ID dictionary and the start timestamp
     ids = {}
-    start_time = time.time()
+    start_time = None
 
     while 1:
         # Do not read the CAN-Bus when in paused mode
@@ -328,6 +327,9 @@ def view(stdscr, can_bus, data_structs, ignore_canopen):  # pragma: no cover
             # Read the CAN-Bus and draw it in the terminal window
             msg = can_bus.recv(timeout=0)
             if msg is not None:
+                # Set the start time when the first message has been received
+                if not start_time:
+                    start_time = msg.timestamp
                 draw_can_bus_message(stdscr, ids, start_time, data_structs, ignore_canopen, msg)
 
         # Read the terminal input

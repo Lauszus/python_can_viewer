@@ -184,7 +184,7 @@ def test_canopen(can_bus):
 
 def test_receive(can_bus):
     ids = {}
-    start_time = time.time()
+    start_time = None
     data_structs = {
         # For converting the EMCY and HEARTBEAT messages
         0x080 + 0x01: struct.Struct('<HBLB'),
@@ -197,6 +197,9 @@ def test_receive(can_bus):
     while 1:
         msg = can_bus.recv(timeout=0)
         if msg is not None:
+            # Set the start time when the first message has been received
+            if not start_time:
+                start_time = msg.timestamp
             _id = draw_can_bus_message(None, ids, start_time,
                                        data_structs if msg.arbitration_id != 0x101 else None,
                                        False if msg.arbitration_id != 0x123456 else True, msg)
@@ -298,7 +301,7 @@ def main(stdscr):
 
     # Initialise the ID dictionary and the start timestamp
     ids = {}
-    start_time = time.time()
+    start_time = None
 
     # Send test messages
     test_canopen(can_bus)
@@ -307,6 +310,9 @@ def main(stdscr):
         # Receive the messages we just sent
         msg = can_bus.recv(timeout=0)
         if msg is not None:
+            # Set the start time when the first message has been received
+            if not start_time:
+                start_time = msg.timestamp
             draw_can_bus_message(stdscr, ids, start_time, None, False, msg)
         else:  # pragma: no cover
             # Read the terminal input
