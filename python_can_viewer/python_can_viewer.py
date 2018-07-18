@@ -404,10 +404,10 @@ class SmartFormatter(argparse.HelpFormatter):  # pragma: no cover
         return action.dest.upper()
 
     def _format_args(self, action, default_metavar):
-        if action.nargs != argparse.REMAINDER:
+        if action.nargs != argparse.REMAINDER and action.nargs != argparse.ONE_OR_MORE:
             return argparse.HelpFormatter._format_args(self, action, default_metavar)
 
-        # Use the metavar if "REMAINDER" is set
+        # Use the metavar if "REMAINDER" or "ONE_OR_MORE" is set
         get_metavar = self._metavar_formatter(action, default_metavar)
         return '%s' % get_metavar(1)
 
@@ -493,7 +493,7 @@ def main():  # pragma: no cover
                             \n      101:<BHL:1:10.0:100.0 \
                             \n  $ python -m python_can_viewer -d file.txt''',
                         metavar='{<id>:<format>,<id>:<format>:<scaling1>:...:<scalingN>,file.txt}',
-                        nargs=argparse.REMAINDER, default='')
+                        nargs=argparse.ONE_OR_MORE, default='')
 
     parser.add_argument('-f', '--filter', help='''R|Comma separated CAN filters for the given CAN interface: \
                         \n      <can_id>:<can_mask> (matches when <received_can_id> & mask == can_id & mask) \
@@ -501,7 +501,7 @@ def main():  # pragma: no cover
                         \nFx to show only frames with ID 0x100 to 0x103: \
                         \n      python -m python_can_viewer -f 100:7FC \
                         \nNote that the ID and mask are alway interpreted as hex values''',
-                        metavar='{<can_id>:<can_mask>,<can_id>~<can_mask>}', nargs=argparse.REMAINDER, default='')
+                        metavar='{<can_id>:<can_mask>,<can_id>~<can_mask>}', nargs=argparse.ONE_OR_MORE, default='')
 
     parser.add_argument('-i', '--interface', dest='interface',
                         help='''R|Specify the backend CAN interface to use. (default: "socketcan")''',
@@ -516,7 +516,7 @@ def main():  # pragma: no cover
     if len(args.filter) > 0:
         # print('Adding filter/s', args.filter)
         for filter in args.filter:
-            print(filter)
+            # print(filter)
             if ':' in filter:
                 _ = filter.split(':')
                 can_id, can_mask = int(_[0], base=16), int(_[1], base=16)
