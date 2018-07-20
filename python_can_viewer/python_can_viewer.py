@@ -454,7 +454,7 @@ def main():  # pragma: no cover
     optional.add_argument('-c', '--channel', help='''Most backend interfaces require some sort of channel.
                           for example with the serial interface the channel might be a rfcomm device: "/dev/rfcomm0"
                           with the socketcan interfaces valid channel examples include: "can0", "vcan0".
-                          (default: "can0")''', default='can0')
+                          (default: use default for the specified interface)''', default=None)
 
     optional.add_argument('-d', '--decode', dest='decode',
                           help='''R|Specify how to convert the raw bytes into real values. \

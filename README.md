@@ -13,7 +13,7 @@ A simple CAN viewer terminal application written in Python. Python 2, Python 3, 
 
 ## Usage
 
-The project can be installed by first cloning the repository and then installing it via pip:
+The program can be installed via pip:
 
 ```bash
 pip install python_can_viewer
@@ -29,13 +29,13 @@ A screenshot of the application can be seen below:
 
 <img src="https://github.com/Lauszus/python_can_viewer/raw/master/screenshot.png" width=400/>
 
-The first column is the number of times a frame with the particular ID has been received, next is the timestamp of the frame relative to when the script was started. The third column is the time between the current frame relative to the previous one. Next is the length of the frame and then the data.
+The first column is the number of times a frame with the particular ID has been received, next is the timestamp of the frame relative to the first received message. The third column is the time between the current frame relative to the previous one. Next is the length of the frame and then the data.
 
 The last two columns are the decoded CANopen function code and node ID. If CANopen is not used, then they can simply be ignored.
 
 ### Command line arguments
 
-By default it will be using the ```can0``` channel and the ```socketcan``` interface. However these can be specified using the ```-c``` and ```-i``` flag respectively.
+By default it will be using the ```socketcan``` interface. All interfaces supported by [python-can](https://github.com/hardbyte/python-can) are supported and can be specified using the ```-i``` argument.
 
 The full usage page can be seen below:
 
@@ -58,7 +58,8 @@ Optional arguments:
                         for example with the serial interface the channel
                         might be a rfcomm device: "/dev/rfcomm0" with the
                         socketcan interfaces valid channel examples include:
-                        "can0", "vcan0". (default: "can0")
+                        "can0", "vcan0". (default: use default for the
+                        specified interface)
   -d, --decode {<id>:<format>,<id>:<format>:<scaling1>:...:<scalingN>,file.txt}
                         Specify how to convert the raw bytes into real values.
                         The ID of the frame is given as the first argument and the format as the second.
