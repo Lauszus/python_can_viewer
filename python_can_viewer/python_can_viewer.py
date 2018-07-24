@@ -93,7 +93,7 @@ class CanViewer:
             self.run()
 
     def run(self):
-        # Clear the terminal and draw the headers
+        # Clear the terminal and draw the header
         self.draw_header()
 
         while 1:
@@ -114,6 +114,7 @@ class CanViewer:
             # Clear by pressing 'c'
             elif key == ord('c'):
                 self.ids = {}
+                self.start_time = None
                 self.scroll = 0
                 self.draw_header()
 
@@ -123,7 +124,7 @@ class CanViewer:
 
             # Scroll by pressing up/down
             elif key == curses.KEY_UP:
-                # Limit scrolling, so the user can do scroll passed the header
+                # Limit scrolling, so the user do not scroll passed the header
                 if self.scroll > 0:
                     self.scroll -= 1
                     self.redraw_screen()
