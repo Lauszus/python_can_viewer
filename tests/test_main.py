@@ -108,9 +108,10 @@ class CanViewerTest(unittest.TestCase):
         mock_is_term_resized.return_value = True if random.random() < .5 else False
         self.addCleanup(patch_is_term_resized.stop)
 
-        patch_resizeterm = patch('curses.resizeterm')
-        patch_resizeterm.start()
-        self.addCleanup(patch_resizeterm.stop)
+        if hasattr(curses, 'resizeterm'):
+            patch_resizeterm = patch('curses.resizeterm')
+            patch_resizeterm.start()
+            self.addCleanup(patch_resizeterm.stop)
 
         self.can_viewer = CanViewer(stdscr, bus, data_structs, ignore_canopen, testing=True)
 

@@ -137,7 +137,8 @@ class CanViewer:
             resized = curses.is_term_resized(self.y, self.x)
             if resized is True:
                 self.y, self.x = self.stdscr.getmaxyx()
-                curses.resizeterm(self.y, self.x)
+                if hasattr(curses, 'resizeterm'):  # pragma: no cover
+                    curses.resizeterm(self.y, self.x)
                 self.redraw_screen()
 
     def __del__(self):
