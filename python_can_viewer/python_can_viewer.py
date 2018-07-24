@@ -141,7 +141,6 @@ class CanViewer:
                     curses.resizeterm(self.y, self.x)
                 self.redraw_screen()
 
-    def __del__(self):
         # Shutdown the CAN-Bus interface
         self.bus.shutdown()
 
