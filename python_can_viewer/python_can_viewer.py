@@ -12,18 +12,14 @@ import argparse
 import can
 import curses
 import os
-import socket
 import six
 import struct
 import sys
 
-from typing import Union, Dict, List
+from curses.ascii import ESC as KEY_ESC, SP as KEY_SPACE
+from typing import Dict, List, Tuple, Union
 
 from . import __version__
-
-# Keycodes not defined in curses
-KEY_ESC = 27
-KEY_SPACE = 32
 
 # CANopen function codes
 CANOPEN_NMT = 0x000
@@ -72,324 +68,319 @@ canopen_function_codes = {
 }
 
 
-# Convert it into raw integer values and then pack the data
-def pack_data(cmd, cmd_to_struct, *args):  # type: (Union(bytes, int), Dict, *float) -> bytes
-    if not cmd_to_struct or len(args) == 0:
-        # If no arguments are given, then the message do not contain a data package
-        return b''
+class CanViewer:
 
-    for key in cmd_to_struct.keys():
-        if cmd == key if isinstance(key, int) else cmd in key:
-            value = cmd_to_struct[key]
-            if isinstance(value, tuple):
-                # The struct is given as the fist argument
-                struct_t = value[0]  # type: struct.Struct
+    def __init__(self, stdscr, bus, data_structs, ignore_canopen, testing=False):
+        self.stdscr = stdscr
+        self.bus = bus
+        self.data_structs = data_structs
+        self.ignore_canopen = ignore_canopen
 
-                # The conversion from SI-units to raw values are given in the rest of the tuple
-                fmt = struct_t.format
+        # Initialise the ID dictionary, start timestamp, scroll and variable for pausing the viewer
+        self.ids = {}
+        self.start_time = None
+        self.scroll = 0
+        self.paused = False
 
-                # Make sure the endian is given as the first argument
-                assert six.byte2int(fmt) == ord(b'<') or six.byte2int(fmt) == ord(b'>')
+        # Get the window dimensions - used for resizing the window
+        self.y, self.x = self.stdscr.getmaxyx()
 
-                # Disable rounding if the format is a float
-                data = []
-                for c, arg, val in zip(six.iterbytes(fmt[1:]), args, value[1:]):
-                    if six.int2byte(c) == b'f':
-                        data.append(arg * val)
-                    else:
-                        data.append(round(arg * val))
-            else:
-                # No conversion from SI-units is needed
-                struct_t = value  # type: struct.Struct
-                data = args
+        # Do not wait for key inputs and disable the cursor
+        self.stdscr.nodelay(True)
+        curses.curs_set(0)
 
-            return struct_t.pack(*data)
-    else:
-        raise ValueError('Unknown command: 0x{:02X}'.format(six.byte2int(cmd) if isinstance(cmd, six.binary_type) else cmd))
+        if not testing:  # pragma: no cover
+            self.run()
 
+    def run(self):
+        # Clear the terminal and draw the headers
+        self.draw_header()
 
-# Unpack the data and then convert it into SI-units
-def unpack_data(cmd, cmd_to_struct, data):  # type: (Union(bytes, int), Dict, bytes) -> Union[List[float], bytes]
-    if not cmd_to_struct or len(data) == 0:
-        # These messages do not contain a data package
-        return b''
+        while 1:
+            # Do not read the CAN-Bus when in paused mode
+            if not self.paused:
+                # Read the CAN-Bus and draw it in the terminal window
+                msg = self.bus.recv(timeout=0)
+                if msg is not None:
+                    self.draw_can_bus_message(msg)
 
-    for key in cmd_to_struct.keys():
-        if cmd == key if isinstance(key, int) else cmd in key:
-            value = cmd_to_struct[key]
-            if isinstance(value, tuple):
-                # The struct is given as the fist argument
-                struct_t = value[0]  # type: struct.Struct
+            # Read the terminal input
+            key = self.stdscr.getch()
 
-                # The conversion from raw values to SI-units are given in the rest of the tuple
-                values = [d // val if isinstance(val, int) else float(d) / val
-                          for d, val in zip(struct_t.unpack(data), value[1:])]
-            else:
-                # No conversion from SI-units is needed
-                struct_t = value  # type: struct.Struct
-                values = list(struct_t.unpack(data))
+            # Stop program if the user presses ESC or 'q'
+            if key == KEY_ESC or key == ord('q'):
+                break
 
-            if len(values) == 1:
-                return values[0]  # Extract the value if there is only one element in the list
-            return values
-    else:
-        raise ValueError('Unknown command: 0x{:02X}'.format(six.byte2int(cmd) if isinstance(cmd, six.binary_type) else cmd))
+            # Clear by pressing 'c'
+            elif key == ord('c'):
+                self.ids = {}
+                self.scroll = 0
+                self.draw_header()
 
+            # Pause by pressing space
+            elif key == KEY_SPACE:
+                self.paused = not self.paused
 
-def parse_canopen_message(msg):
-    canopen_function_code_string, canopen_node_id_string = None, None
+            # Scroll by pressing up/down
+            elif key == curses.KEY_UP:
+                # Limit scrolling, so the user can do scroll passed the header
+                if self.scroll > 0:
+                    self.scroll -= 1
+                    self.redraw_screen()
+            elif key == curses.KEY_DOWN:
+                # Limit scrolling, so the maximum scrolling position is one below the last line
+                if self.scroll <= len(self.ids) - self.y + 1:
+                    self.scroll += 1
+                    self.redraw_screen()
 
-    if not msg.is_extended_id:
-        canopen_function_code = msg.arbitration_id & CANOPEN_FUNCTION_CODE_MASK
-        if canopen_function_code in canopen_function_codes:
-            canopen_node_id = msg.arbitration_id & CANOPEN_NODE_ID_MASK
+            # Check if screen was resized
+            resized = curses.is_term_resized(self.y, self.x)
+            if resized is True:
+                self.y, self.x = self.stdscr.getmaxyx()
+                curses.resizeterm(self.y, self.x)
+                self.redraw_screen()
 
-            # The SYNC and EMCY uses the same function code, so determine which message it is by checking both the
-            # node ID and message length
-            if canopen_function_code == 0x080:
-                # Check if the length is valid
-                if msg.dlc in canopen_function_codes[canopen_function_code]:
-                    # Make sure the length and node ID combination is valid
-                    if (msg.dlc == 0 and canopen_node_id == 0) or (msg.dlc == 8 and 1 <= canopen_node_id <= 127):
-                        canopen_function_code_string = canopen_function_codes[canopen_function_code][msg.dlc]
-            elif (canopen_function_code == 0x000 or canopen_function_code == 0x100) and \
-                    (canopen_node_id != 0 or msg.dlc not in canopen_function_codes[canopen_function_code]):
-                # It is not a CANopen message, as the node ID is not added to these command
-                canopen_function_code_string = None
-            else:
-                if isinstance(canopen_function_codes[canopen_function_code], dict):
-                    # Make sure the message has the defined length
-                    if msg.dlc in canopen_function_codes[canopen_function_code]:
-                        canopen_function_code_string = canopen_function_codes[canopen_function_code][msg.dlc]
-                # These IDs do not have a fixed length
+    def __del__(self):
+        # Shutdown the CAN-Bus interface
+        self.bus.shutdown()
+
+    # Convert it into raw integer values and then pack the data
+    @staticmethod
+    def pack_data(cmd, cmd_to_struct, *args):  # type: (int, Dict, Union[*float, *int]) -> bytes
+        if not cmd_to_struct or len(args) == 0:
+            # If no arguments are given, then the message does not contain a data package
+            return b''
+
+        for key in cmd_to_struct.keys():
+            if cmd == key if isinstance(key, int) else cmd in key:
+                value = cmd_to_struct[key]
+                if isinstance(value, tuple):
+                    # The struct is given as the fist argument
+                    struct_t = value[0]  # type: struct.Struct
+
+                    # The conversion from SI-units to raw values are given in the rest of the tuple
+                    fmt = struct_t.format
+
+                    # Make sure the endian is given as the first argument
+                    assert six.byte2int(fmt) == ord('<') or six.byte2int(fmt) == ord('>')
+
+                    # Disable rounding if the format is a float
+                    data = []
+                    for c, arg, val in zip(six.iterbytes(fmt[1:]), args, value[1:]):
+                        if c == ord('f'):
+                            data.append(arg * val)
+                        else:
+                            data.append(round(arg * val))
                 else:
-                    # Make sure the node ID is valid
-                    if 1 <= canopen_node_id <= 127:
-                        canopen_function_code_string = canopen_function_codes[canopen_function_code]
+                    # No conversion from SI-units is needed
+                    struct_t = value  # type: struct.Struct
+                    data = args
 
-            # Now determine set the node ID string
-            if canopen_function_code_string:
-                if 1 <= canopen_node_id <= 127:  # Make sure the node ID is valid
-                    canopen_node_id_string = '0x{0:02X}'.format(canopen_node_id)
-                elif canopen_function_code == 0x000:
-                    # The NMT command sends the node ID as the second byte, except when it is 0,
-                    # then the command is sent to all nodes
-                    if msg.data[1] == 0:
-                        canopen_node_id_string = 'ALL'
-                    elif 1 <= msg.data[1] <= 127:
-                        canopen_node_id_string = '0x{0:02X}'.format(msg.data[1])
+                return struct_t.pack(*data)
+        else:
+            raise ValueError('Unknown command: 0x{:02X}'.format(cmd))
+
+    # Unpack the data and then convert it into SI-units
+    @staticmethod
+    def unpack_data(cmd, cmd_to_struct, data):  # type: (int, Dict, bytes) -> List[Union[float, int]]
+        if not cmd_to_struct or len(data) == 0:
+            # These messages do not contain a data package
+            return []
+
+        for key in cmd_to_struct.keys():
+            if cmd == key if isinstance(key, int) else cmd in key:
+                value = cmd_to_struct[key]
+                if isinstance(value, tuple):
+                    # The struct is given as the fist argument
+                    struct_t = value[0]  # type: struct.Struct
+
+                    # The conversion from raw values to SI-units are given in the rest of the tuple
+                    values = [d // val if isinstance(val, int) else float(d) / val
+                              for d, val in zip(struct_t.unpack(data), value[1:])]
+                else:
+                    # No conversion from SI-units is needed
+                    struct_t = value  # type: struct.Struct
+                    values = list(struct_t.unpack(data))
+
+                return values
+        else:
+            raise ValueError('Unknown command: 0x{:02X}'.format(cmd))
+
+    @staticmethod
+    def parse_canopen_message(msg):
+        canopen_function_code_string, canopen_node_id_string = None, None
+
+        if not msg.is_extended_id:
+            canopen_function_code = msg.arbitration_id & CANOPEN_FUNCTION_CODE_MASK
+            if canopen_function_code in canopen_function_codes:
+                canopen_node_id = msg.arbitration_id & CANOPEN_NODE_ID_MASK
+
+                # The SYNC and EMCY uses the same function code, so determine which message it is by checking both the
+                # node ID and message length
+                if canopen_function_code == 0x080:
+                    # Check if the length is valid
+                    if msg.dlc in canopen_function_codes[canopen_function_code]:
+                        # Make sure the length and node ID combination is valid
+                        if (msg.dlc == 0 and canopen_node_id == 0) or (msg.dlc == 8 and 1 <= canopen_node_id <= 127):
+                            canopen_function_code_string = canopen_function_codes[canopen_function_code][msg.dlc]
+                elif (canopen_function_code == 0x000 or canopen_function_code == 0x100) and \
+                        (canopen_node_id != 0 or msg.dlc not in canopen_function_codes[canopen_function_code]):
+                    # It is not a CANopen message, as the node ID is not added to these command
+                    canopen_function_code_string = None
+                else:
+                    if isinstance(canopen_function_codes[canopen_function_code], dict):
+                        # Make sure the message has the defined length
+                        if msg.dlc in canopen_function_codes[canopen_function_code]:
+                            canopen_function_code_string = canopen_function_codes[canopen_function_code][msg.dlc]
+                    # These IDs do not have a fixed length
                     else:
-                        # It not a valid NMT command, as the node ID is not valid
-                        canopen_function_code_string = None
-        elif (msg.arbitration_id == 0x7E4 or msg.arbitration_id == 0x7E5) and \
-                msg.dlc in canopen_function_codes[msg.arbitration_id]:
-            # Check if it is the LSS commands
-            canopen_function_code_string = canopen_function_codes[msg.arbitration_id][msg.dlc]
+                        # Make sure the node ID is valid
+                        if 1 <= canopen_node_id <= 127:
+                            canopen_function_code_string = canopen_function_codes[canopen_function_code]
 
-    return canopen_function_code_string, canopen_node_id_string
+                # Now determine set the node ID string
+                if canopen_function_code_string:
+                    if 1 <= canopen_node_id <= 127:  # Make sure the node ID is valid
+                        canopen_node_id_string = '0x{0:02X}'.format(canopen_node_id)
+                    elif canopen_function_code == 0x000:
+                        # The NMT command sends the node ID as the second byte, except when it is 0,
+                        # then the command is sent to all nodes
+                        if msg.data[1] == 0:
+                            canopen_node_id_string = 'ALL'
+                        elif 1 <= msg.data[1] <= 127:
+                            canopen_node_id_string = '0x{0:02X}'.format(msg.data[1])
+                        else:
+                            # It not a valid NMT command, as the node ID is not valid
+                            canopen_function_code_string = None
+            elif (msg.arbitration_id == 0x7E4 or msg.arbitration_id == 0x7E5) and \
+                    msg.dlc in canopen_function_codes[msg.arbitration_id]:
+                # Check if it is the LSS commands
+                canopen_function_code_string = canopen_function_codes[msg.arbitration_id][msg.dlc]
 
+        return canopen_function_code_string, canopen_node_id_string
 
-def draw_can_bus_message(stdscr, ids, start_time, data_structs, ignore_canopen, scroll, msg, sorting=False):
-    # Use the CAN-Bus ID as the key in the dict
-    key = msg.arbitration_id
+    def draw_can_bus_message(self, msg, sorting=False):
+        # Use the CAN-Bus ID as the key in the dict
+        key = msg.arbitration_id
 
-    # Sort the extended IDs at the bottom by setting the 32-bit high
-    if msg.is_extended_id:
-        key |= (1 << 32)
+        # Sort the extended IDs at the bottom by setting the 32-bit high
+        if msg.is_extended_id:
+            key |= (1 << 32)
 
-    new_id_added, length_changed = False, False
-    if not sorting:
-        # Check if it is a new message or if the length is not the same
-        if key not in ids:
-            new_id_added = True
-        elif msg.dlc != ids[key]['msg'].dlc:
-            length_changed = True
+        new_id_added, length_changed = False, False
+        if not sorting:
+            # Check if it is a new message or if the length is not the same
+            if key not in self.ids:
+                new_id_added = True
+                # Set the start time when the first message has been received
+                if not self.start_time:
+                    self.start_time = msg.timestamp
+            elif msg.dlc != self.ids[key]['msg'].dlc:
+                length_changed = True
 
-        if new_id_added or length_changed:
-            # Increment the index if it was just added, but keep it if the length just changed
-            row = len(ids) + 1 if new_id_added else ids[key]['row']
+            if new_id_added or length_changed:
+                # Increment the index if it was just added, but keep it if the length just changed
+                row = len(self.ids) + 1 if new_id_added else self.ids[key]['row']
 
-            # It's a new message ID or the length has changed, so add it to the dict
-            # The first index is the row index, the second is the frame counter,
-            # the third is a copy of the CAN-Bus frame
-            # and the forth index is the time since the previous message
-            ids[key] = {'row': row, 'count': 0, 'msg': msg, 'dt': 0}
+                # It's a new message ID or the length has changed, so add it to the dict
+                # The first index is the row index, the second is the frame counter,
+                # the third is a copy of the CAN-Bus frame
+                # and the forth index is the time since the previous message
+                self.ids[key] = {'row': row, 'count': 0, 'msg': msg, 'dt': 0}
+            else:
+                # Calculate the time since the last message and save the timestamp
+                self.ids[key]['dt'] = msg.timestamp - self.ids[key]['msg'].timestamp
+
+                # Copy the CAN-Bus frame - this is used for sorting
+                self.ids[key]['msg'] = msg
+
+            # Increment frame counter
+            self.ids[key]['count'] += 1
+
+        # Sort frames based on the CAN-Bus ID if a new frame was added
+        if new_id_added:
+            self.draw_header()
+            for i, key in enumerate(sorted(self.ids.keys())):
+                # Set the new row index, but skip the header
+                self.ids[key]['row'] = i + 1
+
+                # Do a recursive call, so the frames are repositioned
+                self.draw_can_bus_message(self.ids[key]['msg'], sorting=True)
         else:
-            # Calculate the time since the last message and save the timestamp
-            ids[key]['dt'] = msg.timestamp - ids[key]['msg'].timestamp
+            # Format the CAN-Bus ID as a hex value
+            arbitration_id_string = '0x{0:0{1}X}'.format(msg.arbitration_id, 8 if msg.is_extended_id else 3)
 
-            # Copy the CAN.Bus frame - this is used for sorting
-            ids[key]['msg'] = msg
+            # Generate data string
+            data_string = ''
+            if msg.dlc > 0:
+                data_string = ' '.join('{:02X}'.format(x) for x in msg.data)
 
-        # Increment frame counter
-        ids[key]['count'] += 1
+            # Check if is a CANopen message
+            if self.ignore_canopen:
+                canopen_function_code_string, canopen_node_id_string = None, None
+            else:
+                canopen_function_code_string, canopen_node_id_string = self.parse_canopen_message(msg)
 
-    # Sort frames based on the CAN-Bus ID if a new frame was added
-    if new_id_added:
-        draw_header(stdscr, data_structs, ignore_canopen, scroll)
-        for i, key in enumerate(sorted(ids.keys())):
-            # Set the new row index, but skip the header
-            ids[key]['row'] = i + 1
+            # Now draw the CAN-Bus message on the terminal window
+            self.draw_line(self.ids[key]['row'], 0, str(self.ids[key]['count']))
+            self.draw_line(self.ids[key]['row'], 8, '{0:.6f}'.format(self.ids[key]['msg'].timestamp - self.start_time))
+            self.draw_line(self.ids[key]['row'], 23, '{0:.6f}'.format(self.ids[key]['dt']))
+            self.draw_line(self.ids[key]['row'], 35, arbitration_id_string)
+            self.draw_line(self.ids[key]['row'], 47, str(msg.dlc))
+            self.draw_line(self.ids[key]['row'], 52, data_string)
+            if canopen_function_code_string:
+                self.draw_line(self.ids[key]['row'], 77, canopen_function_code_string)
+            if canopen_node_id_string:
+                self.draw_line(self.ids[key]['row'], 88, canopen_node_id_string)
 
-            # Do a recursive call, so the frames are repositioned
-            draw_can_bus_message(stdscr, ids, start_time, data_structs, ignore_canopen, scroll, ids[key]['msg'], sorting=True)
-    else:
-        # Format the CAN-Bus ID as a hex value
-        arbitration_id_string = '0x{0:0{1}X}'.format(msg.arbitration_id, 8 if msg.is_extended_id else 3)
-
-        # Generate data string
-        data_string = ''
-        if msg.dlc > 0:
-            data_string = ' '.join('{:02X}'.format(x) for x in msg.data)
-
-        # Check if is a CANopen message
-        if ignore_canopen:
-            canopen_function_code_string, canopen_node_id_string = None, None
-        else:
-            canopen_function_code_string, canopen_node_id_string = parse_canopen_message(msg)
-
-        # Now draw the CAN-Bus message on the terminal window
-        draw_line(stdscr, ids[key]['row'], 0, scroll, str(ids[key]['count']))
-        draw_line(stdscr, ids[key]['row'], 8, scroll, '{0:.6f}'.format(ids[key]['msg'].timestamp - start_time))
-        draw_line(stdscr, ids[key]['row'], 23, scroll, '{0:.6f}'.format(ids[key]['dt']))
-        draw_line(stdscr, ids[key]['row'], 35, scroll, arbitration_id_string)
-        draw_line(stdscr, ids[key]['row'], 47, scroll, str(msg.dlc))
-        draw_line(stdscr, ids[key]['row'], 52, scroll, data_string)
-        if canopen_function_code_string:
-            draw_line(stdscr, ids[key]['row'], 77, scroll, canopen_function_code_string)
-        if canopen_node_id_string:
-            draw_line(stdscr, ids[key]['row'], 88, scroll, canopen_node_id_string)
-
-        if data_structs:
-            try:
-                data = unpack_data(msg.arbitration_id, data_structs, msg.data)
+            if self.data_structs:
                 try:
                     values_list = []
-                    for x in data:
+                    for x in self.unpack_data(msg.arbitration_id, self.data_structs, msg.data):
                         if isinstance(x, float):
                             values_list.append('{0:.6f}'.format(x))
                         else:
                             values_list.append(str(x))
                     values_string = ' '.join(values_list)
-                except TypeError:
-                    # The data was not iterable fx a single int
-                    values_string = str(data)
-                draw_line(stdscr, ids[key]['row'], 97 - (20 if ignore_canopen else 0), scroll, values_string)
-            except (ValueError, struct.error):
-                pass
+                    self.draw_line(self.ids[key]['row'], 97 - (20 if self.ignore_canopen else 0), values_string)
+                except (ValueError, struct.error):
+                    pass
 
-    return ids[key]
+        return self.ids[key]
 
+    def draw_line(self, row, col, txt, *args):
+        if row - self.scroll < 0:
+            # Skip if we have scrolled passed the line
+            return
+        try:
+            self.stdscr.addstr(row - self.scroll, col, txt, *args)
+        except curses.error:
+            # Ignore if we are trying to write outside the window
+            # This happens if the terminal window is too small
+            pass
 
-def draw_line(stdscr, row, col, scroll, txt, *args):  # pragma: no cover
-    if not stdscr:
-        return  # Used when testing
+    def draw_header(self):
+        self.stdscr.clear()
+        self.draw_line(0, 0, 'Count', curses.A_BOLD)
+        self.draw_line(0, 8, 'Time', curses.A_BOLD)
+        self.draw_line(0, 23, 'dt', curses.A_BOLD)
+        self.draw_line(0, 35, 'ID', curses.A_BOLD)
+        self.draw_line(0, 47, 'DLC', curses.A_BOLD)
+        self.draw_line(0, 52, 'Data', curses.A_BOLD)
+        if not self.ignore_canopen:
+            self.draw_line(0, 77, 'Func code', curses.A_BOLD)
+            self.draw_line(0, 88, 'Node ID', curses.A_BOLD)
+        if self.data_structs:  # Only draw if the dictionary is not empty
+            self.draw_line(0, 97 - (20 if self.ignore_canopen else 0), 'Parsed values', curses.A_BOLD)
 
-    if row - scroll < 0:
-        # Skip if we have scrolled passed the line
-        return
-    try:
-        stdscr.addstr(row - scroll, col, txt, *args)
-    except curses.error:
-        # Ignore if we are trying to write outside the window
-        # This happens if the terminal window is too small
-        pass
-
-
-def draw_header(stdscr, data_structs, ignore_canopen, scroll):  # pragma: no cover
-    if not stdscr:
-        return  # Used when testing
-
-    stdscr.clear()
-    draw_line(stdscr, 0, 0, scroll, 'Count', curses.A_BOLD)
-    draw_line(stdscr, 0, 8, scroll, 'Time', curses.A_BOLD)
-    draw_line(stdscr, 0, 23, scroll, 'dt', curses.A_BOLD)
-    draw_line(stdscr, 0, 35, scroll, 'ID', curses.A_BOLD)
-    draw_line(stdscr, 0, 47, scroll, 'DLC', curses.A_BOLD)
-    draw_line(stdscr, 0, 52, scroll, 'Data', curses.A_BOLD)
-    if not ignore_canopen:
-        draw_line(stdscr, 0, 77, scroll, 'Func code', curses.A_BOLD)
-        draw_line(stdscr, 0, 88, scroll, 'Node ID', curses.A_BOLD)
-    if data_structs:  # Only draw if the dictionary is not empty
-        draw_line(stdscr, 0, 97 - (20 if ignore_canopen else 0), scroll, 'Parsed values', curses.A_BOLD)
+    def redraw_screen(self):
+        # Trigger a complete redraw
+        self.draw_header()
+        for key in self.ids.keys():
+            self.draw_can_bus_message(self.ids[key]['msg'])
 
 
-def redraw_screen(stdscr, ids, start_time, data_structs, ignore_canopen, scroll):  # pragma: no cover
-    # Trigger a complete redraw
-    draw_header(stdscr, data_structs, ignore_canopen, scroll)
-    for key in ids.keys():
-        draw_can_bus_message(stdscr, ids, start_time, data_structs, ignore_canopen, scroll, ids[key]['msg'])
-
-
-def view(stdscr, can_bus, data_structs, ignore_canopen):  # pragma: no cover
-    # Do not wait for key inputs and disable the cursor
-    stdscr.nodelay(True)
-    curses.curs_set(0)
-
-    # Get the window dimensions - used for resizing the window
-    y, x = stdscr.getmaxyx()
-
-    # Initialise the ID dictionary, start timestamp, scroll and variable for pausing the viewer
-    ids = {}
-    start_time = None
-    scroll = 0
-    paused = False
-
-    # Clear the terminal and draw the headers
-    draw_header(stdscr, data_structs, ignore_canopen, scroll)
-
-    while 1:
-        # Do not read the CAN-Bus when in paused mode
-        if not paused:
-            # Read the CAN-Bus and draw it in the terminal window
-            msg = can_bus.recv(timeout=0)
-            if msg is not None:
-                # Set the start time when the first message has been received
-                if not start_time:
-                    start_time = msg.timestamp
-                draw_can_bus_message(stdscr, ids, start_time, data_structs, ignore_canopen, scroll, msg)
-
-        # Read the terminal input
-        key = stdscr.getch()
-
-        # Stop program if the user presses ESC or 'q'
-        if key == KEY_ESC or key == ord('q'):
-            break
-
-        # Clear by pressing 'c'
-        elif key == ord('c'):
-            ids = {}
-            scroll = 0
-            draw_header(stdscr, data_structs, ignore_canopen, scroll)
-
-        # Pause by pressing space
-        elif key == KEY_SPACE:
-            paused = not paused
-
-        # Scroll by pressing up/down
-        elif key == curses.KEY_UP:
-            # Limit scrolling, so the user can do scroll passed the header
-            if scroll > 0:
-                scroll -= 1
-                redraw_screen(stdscr, ids, start_time, data_structs, ignore_canopen, scroll)
-        elif key == curses.KEY_DOWN:
-            # Limit scrolling, so the maximum scrolling position is one below the last line
-            if scroll <= len(ids) - y + 1:
-                scroll += 1
-                redraw_screen(stdscr, ids, start_time, data_structs, ignore_canopen, scroll)
-
-        # Check if screen was resized
-        resize = curses.is_term_resized(y, x)
-        if resize is True:
-            y, x = stdscr.getmaxyx()
-            curses.resizeterm(y, x)
-            redraw_screen(stdscr, ids, start_time, data_structs, ignore_canopen, scroll)
-
-    # Shutdown the CAN-Bus interface
-    can_bus.shutdown()
-
-
-# noinspection PyUnresolvedReferences,PyProtectedMember,PyMethodMayBeStatic
+# noinspection PyUnresolvedReferences,PyProtectedMember,PyMethodMayBeStatic,PyUnusedLocal
 class SmartFormatter(argparse.HelpFormatter):  # pragma: no cover
 
     def _get_default_metavar_for_optional(self, action):
@@ -430,10 +421,10 @@ class SmartFormatter(argparse.HelpFormatter):  # pragma: no cover
         return argparse.HelpFormatter._split_lines(self, text, width)
 
 
-def main():  # pragma: no cover
+def parse_args(args):
     # Python versions >= 3.5
     kwargs = {}
-    if sys.version_info[0] * 10 + sys.version_info[1] >= 35:
+    if sys.version_info[0] * 10 + sys.version_info[1] >= 35:  # pragma: no cover
         kwargs = {'allow_abbrev': False}
 
     # Parse command line arguments
@@ -505,30 +496,26 @@ def main():  # pragma: no cover
                           help='''R|Specify the backend CAN interface to use. (default: "socketcan")''',
                           choices=sorted(can.VALID_INTERFACES), default='socketcan')
 
-    optional.add_argument('--ignore-canopen', dest='canopen', help='''Do not print CANopen information''',
+    optional.add_argument('--ignore-canopen', dest='ignore_canopen', help='''Do not print CANopen information''',
                           action='store_true')
 
-    args = parser.parse_args()
+    parsed_args = parser.parse_args(args)
 
     can_filters = []
-    if len(args.filter) > 0:
-        # print('Adding filter/s', args.filter)
-        for filter in args.filter:
+    if len(parsed_args.filter) > 0:
+        # print('Adding filter/s', parsed_args.filter)
+        for flt in parsed_args.filter:
             # print(filter)
-            if ':' in filter:
-                _ = filter.split(':')
+            if ':' in flt:
+                _ = flt.split(':')
                 can_id, can_mask = int(_[0], base=16), int(_[1], base=16)
-            elif '~' in filter:
-                can_id, can_mask = filter.split('~')
+            elif '~' in flt:
+                can_id, can_mask = flt.split('~')
                 can_id = int(can_id, base=16) | 0x20000000  # CAN_INV_FILTER
-                can_mask = int(can_mask, base=16) & socket.CAN_ERR_FLAG
+                can_mask = int(can_mask, base=16) & 0x20000000  # socket.CAN_ERR_FLAG
+            else:
+                raise argparse.ArgumentError(None, 'Invalid filter argument')
             can_filters.append({'can_id': can_id, 'can_mask': can_mask})
-
-    config = {'can_filters': can_filters}
-    if args.interface:
-        config['bustype'] = args.interface
-    if args.bitrate:
-        config['bitrate'] = args.bitrate
 
     # Dictionary used to convert between Python values and C structs represented as Python strings.
     # If the value is 'None' then the message does not contain any data package.
@@ -548,13 +535,13 @@ def main():  # pragma: no cover
     # An optional conversion from real units to integers can be given as additional arguments.
     # In order to convert from raw integer value the real units are multiplied with the values and similarly the values
     # are divided by the value in order to convert from real units to raw integer values.
-    data_structs = {}  # type: Dict[Union[bytes, Tuple[bytes, ...]], Union[struct.Struct, Tuple, None]]
-    if len(args.decode) > 0:
-        if os.path.isfile(args.decode[0]):
-            with open(args.decode[0], 'r') as f:
+    data_structs = {}  # type: Dict[Union[int, Tuple[int, ...]], Union[struct.Struct, Tuple, None]]
+    if len(parsed_args.decode) > 0:
+        if os.path.isfile(parsed_args.decode[0]):
+            with open(parsed_args.decode[0], 'r') as f:
                 structs = f.readlines()
         else:
-            structs = args.decode
+            structs = parsed_args.decode
 
         for s in structs:
             tmp = s.rstrip('\n').split(':')
@@ -563,7 +550,7 @@ def main():  # pragma: no cover
             key, fmt = int(tmp[0], base=16), tmp[1]
 
             # The scaling
-            scaling = []
+            scaling = []  # type: list
             for t in tmp[2:]:
                 # First try to convert to int, if that fails, then convert to a float
                 try:
@@ -577,13 +564,25 @@ def main():  # pragma: no cover
                 data_structs[key] = struct.Struct(fmt)
             # print(data_structs[key])
 
-    ignore_canopen = args.canopen
+    ignore_canopen = parsed_args.ignore_canopen
+
+    return parsed_args, can_filters, data_structs, ignore_canopen
+
+
+def main():  # pragma: no cover
+    parsed_args, can_filters, data_structs, ignore_canopen = parse_args(sys.argv[1:])
+
+    config = {'can_filters': can_filters}
+    if parsed_args.interface:
+        config['interface'] = parsed_args.interface
+    if parsed_args.bitrate:
+        config['bitrate'] = parsed_args.bitrate
 
     # Create a CAN-Bus interface
-    can_bus = can.interface.Bus(args.channel, **config)
-    # print('Connected to {}: {}'.format(can_bus.__class__.__name__, can_bus.channel_info))
+    bus = can.interface.Bus(parsed_args.channel, **config)
+    # print('Connected to {}: {}'.format(bus.__class__.__name__, bus.channel_info))
 
-    curses.wrapper(view, can_bus, data_structs, ignore_canopen)
+    curses.wrapper(CanViewer, bus, data_structs, ignore_canopen)
 
 
 if __name__ == '__main__':  # pragma: no cover

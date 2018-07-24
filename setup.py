@@ -20,6 +20,7 @@ with open('README.md', 'r') as f:
 
 tests_require = [
     'future',
+    'mock',
     'pytest',
     'pytest-runner',
     'coverage',
