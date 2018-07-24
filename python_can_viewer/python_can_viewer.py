@@ -572,7 +572,9 @@ def parse_args(args):
 def main():  # pragma: no cover
     parsed_args, can_filters, data_structs, ignore_canopen = parse_args(sys.argv[1:])
 
-    config = {'can_filters': can_filters}
+    config = {}
+    if can_filters:
+        config['can_filters'] = can_filters
     if parsed_args.interface:
         config['interface'] = parsed_args.interface
     if parsed_args.bitrate:
