@@ -1,4 +1,5 @@
 #!/usr/bin/python
+# coding: utf-8
 #
 # Copyright (C) 2018 Kristian Sloth Lauszus. All rights reserved.
 #
