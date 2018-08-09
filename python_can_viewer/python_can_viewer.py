@@ -162,6 +162,9 @@ class CanViewer:
 
                     # The conversion from SI-units to raw values are given in the rest of the tuple
                     fmt = struct_t.format
+                    if isinstance(fmt, six.string_types):  # pragma: no cover
+                        # Needed for Python 3.7
+                        fmt = six.b(fmt)
 
                     # Make sure the endian is given as the first argument
                     assert six.byte2int(fmt) == ord('<') or six.byte2int(fmt) == ord('>')

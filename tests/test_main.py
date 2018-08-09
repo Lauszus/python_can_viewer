@@ -417,7 +417,7 @@ class CanViewerTest(unittest.TestCase):
         self.assertEqual(len(data_structs), 1)
 
         self.assertIsInstance(data_structs[0x100], struct.Struct)
-        self.assertEqual(data_structs[0x100].format, b'<L')
+        self.assertIn(data_structs[0x100].format, ['<L', b'<L'])
         self.assertEqual(data_structs[0x100].size, 4)
 
         f = open('test.txt', 'w')
@@ -429,11 +429,11 @@ class CanViewerTest(unittest.TestCase):
         self.assertEqual(len(data_structs), 2)
 
         self.assertIsInstance(data_structs[0x100], struct.Struct)
-        self.assertEqual(data_structs[0x100].format, b'<BB')
+        self.assertIn(data_structs[0x100].format, ['<BB', b'<BB'])
         self.assertEqual(data_structs[0x100].size, 2)
 
         self.assertIsInstance(data_structs[0x101], struct.Struct)
-        self.assertEqual(data_structs[0x101].format, b'<HH')
+        self.assertIn(data_structs[0x101].format, ['<HH', b'<HH'])
         self.assertEqual(data_structs[0x101].size, 4)
         os.remove('test.txt')
 
@@ -449,19 +449,19 @@ class CanViewerTest(unittest.TestCase):
         self.assertIsInstance(data_structs[0x100][0], struct.Struct)
         self.assertIsInstance(data_structs[0x100][1], float)
         self.assertIsInstance(data_structs[0x100][2], float)
-        self.assertEqual(data_structs[0x100][0].format, b'<LH')
+        self.assertIn(data_structs[0x100][0].format, ['<LH', b'<LH'])
         self.assertEqual(data_structs[0x100][0].size, 6)
         self.assertEqual(data_structs[0x100][1], 10.0)
         self.assertEqual(data_structs[0x100][2], 100.0)
 
         self.assertIsInstance(data_structs[0x101], struct.Struct)
-        self.assertEqual(data_structs[0x101].format, b'<ff')
+        self.assertIn(data_structs[0x101].format, ['<ff', b'<ff'])
         self.assertEqual(data_structs[0x101].size, 8)
 
         self.assertIsInstance(data_structs[0x102][0], struct.Struct)
         self.assertIsInstance(data_structs[0x102][1], int)
         self.assertIsInstance(data_structs[0x102][2], float)
-        self.assertEqual(data_structs[0x102][0].format, b'<Bf')
+        self.assertIn(data_structs[0x102][0].format, ['<Bf', b'<Bf'])
         self.assertEqual(data_structs[0x102][0].size, 5)
         self.assertEqual(data_structs[0x102][1], 1)
         self.assertAlmostEqual(data_structs[0x102][2], 57.3)
