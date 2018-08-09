@@ -13,7 +13,6 @@ import argparse
 import can
 import curses
 import datetime
-import operator
 import math
 import pytest
 import random
@@ -126,57 +125,57 @@ class CanViewerTest(unittest.TestCase):
         data = [2, 1]  # cmd = stop node, node ID = 1
         msg = can.Message(arbitration_id=CANOPEN_NMT, data=data, extended_id=False)
         self.can_viewer.bus.send(msg)
-        assert operator.eq(self.can_viewer.parse_canopen_message(msg), ('NMT', '0x01'))
+        self.assertTupleEqual(self.can_viewer.parse_canopen_message(msg), ('NMT', '0x01'))
 
         msg = can.Message(arbitration_id=CANOPEN_NMT, data=data, extended_id=True)  # CANopen do not use an extended id
         self.can_viewer.bus.send(msg)
-        assert operator.eq(self.can_viewer.parse_canopen_message(msg), (None, None))
+        self.assertTupleEqual(self.can_viewer.parse_canopen_message(msg), (None, None))
 
         # The ID is not added to the NMT function code
         msg = can.Message(arbitration_id=CANOPEN_NMT + 1, data=data, extended_id=False)
         self.can_viewer.bus.send(msg)
-        assert operator.eq(self.can_viewer.parse_canopen_message(msg), (None, None))
+        self.assertTupleEqual(self.can_viewer.parse_canopen_message(msg), (None, None))
 
         data = [2, 128]  # cmd = stop node, node ID = invalid id
         msg = can.Message(arbitration_id=CANOPEN_NMT, data=data, extended_id=False)
         self.can_viewer.bus.send(msg)
-        assert operator.eq(self.can_viewer.parse_canopen_message(msg), (None, None))
+        self.assertTupleEqual(self.can_viewer.parse_canopen_message(msg), (None, None))
 
         data = [1, 0]  # cmd = start node, node ID = all
         msg = can.Message(arbitration_id=CANOPEN_NMT, data=data, extended_id=False)
         self.can_viewer.bus.send(msg)
-        assert operator.eq(self.can_viewer.parse_canopen_message(msg), ('NMT', 'ALL'))
+        self.assertTupleEqual(self.can_viewer.parse_canopen_message(msg), ('NMT', 'ALL'))
 
         # SYNC
         # The ID is not added to the SYNC function code
         msg = can.Message(arbitration_id=CANOPEN_SYNC_EMCY + 1, data=None, extended_id=False)
         self.can_viewer.bus.send(msg)
-        assert operator.eq(self.can_viewer.parse_canopen_message(msg), (None, None))
+        self.assertTupleEqual(self.can_viewer.parse_canopen_message(msg), (None, None))
 
         data = [1, 2, 3, 4, 5, 6, 7, 8]  # Wrong length
         msg = can.Message(arbitration_id=CANOPEN_SYNC_EMCY, data=data, extended_id=False)
         self.can_viewer.bus.send(msg)
-        assert operator.eq(self.can_viewer.parse_canopen_message(msg), (None, None))
+        self.assertTupleEqual(self.can_viewer.parse_canopen_message(msg), (None, None))
 
         msg = can.Message(arbitration_id=CANOPEN_SYNC_EMCY, data=None, extended_id=False)
         self.can_viewer.bus.send(msg)
-        assert operator.eq(self.can_viewer.parse_canopen_message(msg), ('SYNC', None))
+        self.assertTupleEqual(self.can_viewer.parse_canopen_message(msg), ('SYNC', None))
 
         # EMCY
         data = [1, 2, 3, 4, 5, 6, 7]  # Wrong length
         msg = can.Message(arbitration_id=CANOPEN_SYNC_EMCY + 1, data=data, extended_id=False)
         self.can_viewer.bus.send(msg)
         tmp = self.can_viewer.parse_canopen_message(msg)
-        assert operator.eq(tmp, (None, None))
+        self.assertTupleEqual(tmp, (None, None))
 
         data = [1, 2, 3, 4, 5, 6, 7, 8]
         msg = can.Message(arbitration_id=CANOPEN_SYNC_EMCY + 128, data=data, extended_id=False)  # Invalid ID
         self.can_viewer.bus.send(msg)
-        assert operator.eq(self.can_viewer.parse_canopen_message(msg), (None, None))
+        self.assertTupleEqual(self.can_viewer.parse_canopen_message(msg), (None, None))
 
         msg = can.Message(arbitration_id=CANOPEN_SYNC_EMCY + 1, data=data, extended_id=False)
         self.can_viewer.bus.send(msg)
-        assert operator.eq(self.can_viewer.parse_canopen_message(msg), ('EMCY', '0x01'))
+        self.assertTupleEqual(self.can_viewer.parse_canopen_message(msg), ('EMCY', '0x01'))
 
         # TIME
         one_day_seconds = 24 * 60 * 60
@@ -188,12 +187,12 @@ class CanViewerTest(unittest.TestCase):
         data = time_struct.pack(round(seconds * 1000), int(days))
         msg = can.Message(arbitration_id=CANOPEN_TIME, data=data, extended_id=False)
         self.can_viewer.bus.send(msg)
-        assert operator.eq(self.can_viewer.parse_canopen_message(msg), ('TIME', None))
+        self.assertTupleEqual(self.can_viewer.parse_canopen_message(msg), ('TIME', None))
 
         # The ID is not added to the TIME function code
         msg = can.Message(arbitration_id=CANOPEN_TIME + 1, data=data, extended_id=False)
         self.can_viewer.bus.send(msg)
-        assert operator.eq(self.can_viewer.parse_canopen_message(msg), (None, None))
+        self.assertTupleEqual(self.can_viewer.parse_canopen_message(msg), (None, None))
 
         # milliseconds, days = time_struct.unpack(data)
         # seconds = days * one_day_seconds + milliseconds / 1000.
@@ -207,69 +206,69 @@ class CanViewerTest(unittest.TestCase):
             node_id = i + 1
             msg = can.Message(arbitration_id=func_code + node_id, data=data, extended_id=False)
             self.can_viewer.bus.send(msg)
-            assert operator.eq(self.can_viewer.parse_canopen_message(msg), (canopen_function_codes[func_code],
-                                                                            '0x{0:02X}'.format(node_id)))
+            self.assertTupleEqual(self.can_viewer.parse_canopen_message(msg), (canopen_function_codes[func_code],
+                                                                               '0x{0:02X}'.format(node_id)))
 
         # Set invalid node ID
         msg = can.Message(arbitration_id=CANOPEN_TPDO1 + 128, data=data, extended_id=False)
         self.can_viewer.bus.send(msg)
-        assert operator.eq(self.can_viewer.parse_canopen_message(msg), (None, None))
+        self.assertTupleEqual(self.can_viewer.parse_canopen_message(msg), (None, None))
 
         # SDO_TX
         data = [1, 2, 3, 4, 5, 6, 7, 8]
         msg = can.Message(arbitration_id=CANOPEN_SDO_TX + 0x10, data=data, extended_id=False)
         self.can_viewer.bus.send(msg)
-        assert operator.eq(self.can_viewer.parse_canopen_message(msg), ('SDO_TX', '0x10'))
+        self.assertTupleEqual(self.can_viewer.parse_canopen_message(msg), ('SDO_TX', '0x10'))
 
         data = [1, 2, 3, 4]  # Invalid data length
         msg = can.Message(arbitration_id=CANOPEN_SDO_TX + 0x10, data=data, extended_id=False)
         self.can_viewer.bus.send(msg)
-        assert operator.eq(self.can_viewer.parse_canopen_message(msg), (None, None))
+        self.assertTupleEqual(self.can_viewer.parse_canopen_message(msg), (None, None))
 
         # SDO_RX
         data = [1, 2, 3, 4, 5, 6, 7, 8]
         msg = can.Message(arbitration_id=CANOPEN_SDO_RX + 0x20, data=data, extended_id=False)
         self.can_viewer.bus.send(msg)
-        assert operator.eq(self.can_viewer.parse_canopen_message(msg), ('SDO_RX', '0x20'))
+        self.assertTupleEqual(self.can_viewer.parse_canopen_message(msg), ('SDO_RX', '0x20'))
 
         # HEARTBEAT
         data = [0x05]  # Operational
         msg = can.Message(arbitration_id=CANOPEN_HEARTBEAT + 0x7F, data=data, extended_id=False)
         self.can_viewer.bus.send(msg)
-        assert operator.eq(self.can_viewer.parse_canopen_message(msg), ('HEARTBEAT', '0x7F'))
+        self.assertTupleEqual(self.can_viewer.parse_canopen_message(msg), ('HEARTBEAT', '0x7F'))
 
         # LSS_TX
         data = [1, 2, 3, 4, 5, 6, 7, 8]
         msg = can.Message(arbitration_id=CANOPEN_LSS_TX, data=data, extended_id=False)
         self.can_viewer.bus.send(msg)
-        assert operator.eq(self.can_viewer.parse_canopen_message(msg), ('LSS_TX', None))
+        self.assertTupleEqual(self.can_viewer.parse_canopen_message(msg), ('LSS_TX', None))
 
         # LSS_RX
         msg = can.Message(arbitration_id=CANOPEN_LSS_RX, data=data, extended_id=False)
         self.can_viewer.bus.send(msg)
-        assert operator.eq(self.can_viewer.parse_canopen_message(msg), ('LSS_RX', None))
+        self.assertTupleEqual(self.can_viewer.parse_canopen_message(msg), ('LSS_RX', None))
 
         # Send ID that does not match any of the function codes
         msg = can.Message(arbitration_id=CANOPEN_LSS_RX + 1, data=data, extended_id=False)
         self.can_viewer.bus.send(msg)
-        assert operator.eq(self.can_viewer.parse_canopen_message(msg), (None, None))
+        self.assertTupleEqual(self.can_viewer.parse_canopen_message(msg), (None, None))
 
         # Send non-CANopen message
         msg = can.Message(arbitration_id=0x101, data=data, extended_id=False)
         self.can_viewer.bus.send(msg)
-        assert operator.eq(self.can_viewer.parse_canopen_message(msg), (None, None))
+        self.assertTupleEqual(self.can_viewer.parse_canopen_message(msg), (None, None))
 
         # Send the same command, but with another data length
         data = [1, 2, 3, 4, 5, 6]
         msg = can.Message(arbitration_id=0x101, data=data, extended_id=False)
         self.can_viewer.bus.send(msg)
-        assert operator.eq(self.can_viewer.parse_canopen_message(msg), (None, None))
+        self.assertTupleEqual(self.can_viewer.parse_canopen_message(msg), (None, None))
 
         # Message with extended id
         data = [1, 2, 3, 4, 5, 6, 7, 8]
         msg = can.Message(arbitration_id=0x123456, data=data, extended_id=True)
         self.can_viewer.bus.send(msg)
-        assert operator.eq(self.can_viewer.parse_canopen_message(msg), (None, None))
+        self.assertTupleEqual(self.can_viewer.parse_canopen_message(msg), (None, None))
 
         # Send the same message again to make sure that resending works and dt is correct
         time.sleep(.1)
@@ -296,18 +295,18 @@ class CanViewerTest(unittest.TestCase):
                 _id = self.can_viewer.draw_can_bus_message(msg)
                 if _id['msg'].arbitration_id == 0x101:
                     # Check if the counter is reset when the length has changed
-                    assert _id['count'] == 1
+                    self.assertEqual(_id['count'], 1)
                 elif _id['msg'].arbitration_id == 0x123456:
                     # Check if the counter is incremented
                     if _id['dt'] == 0:
-                        assert _id['count'] == 1
+                        self.assertEqual(_id['count'], 1)
                     else:
-                        assert _id['count'] == 2
-                        assert pytest.approx(_id['dt'], 0.1)  # dt should be ~0.1 s
+                        self.assertTrue(pytest.approx(_id['dt'], 0.1))  # dt should be ~0.1 s
+                        self.assertEqual(_id['count'], 2)
                 else:
                     # Make sure dt is 0
                     if _id['count'] == 1:
-                        assert _id['dt'] == 0
+                        self.assertEqual(_id['dt'], 0)
             else:
                 break
 
@@ -343,45 +342,45 @@ class CanViewerTest(unittest.TestCase):
 
         raw_data = CanViewer.pack_data(CANOPEN_TPDO1 + 1, data_structs, -7, 13, -1024, 2048, 0xFFFF)
         parsed_data = CanViewer.unpack_data(CANOPEN_TPDO1 + 1, data_structs, raw_data)
-        assert parsed_data == [-7, 13, -1024, 2048, 0xFFFF]
-        assert all(isinstance(d, int) for d in parsed_data)
+        self.assertListEqual(parsed_data, [-7, 13, -1024, 2048, 0xFFFF])
+        self.assertTrue(all(isinstance(d, int) for d in parsed_data))
 
         raw_data = CanViewer.pack_data(CANOPEN_TPDO2 + 1, data_structs, 12.34, 4.5, 6)
         parsed_data = CanViewer.unpack_data(CANOPEN_TPDO2 + 1, data_structs, raw_data)
-        assert pytest.approx(parsed_data, [12.34, 4.5, 6])
-        assert isinstance(parsed_data[0], float) and isinstance(parsed_data[1], float) and isinstance(parsed_data[2],
-                                                                                                      int)
+        self.assertTrue(pytest.approx(parsed_data, [12.34, 4.5, 6]))
+        self.assertTrue(isinstance(parsed_data[0], float) and isinstance(parsed_data[1], float) and \
+                        isinstance(parsed_data[2], int))
 
         raw_data = CanViewer.pack_data(CANOPEN_TPDO3 + 1, data_structs, 123.45, 67.89)
         parsed_data = CanViewer.unpack_data(CANOPEN_TPDO3 + 1, data_structs, raw_data)
-        assert pytest.approx(parsed_data, [123.45, 67.89])
-        assert all(isinstance(d, float) for d in parsed_data)
+        self.assertTrue(pytest.approx(parsed_data, [123.45, 67.89]))
+        self.assertTrue(all(isinstance(d, float) for d in parsed_data))
 
         raw_data = CanViewer.pack_data(CANOPEN_TPDO4 + 1, data_structs, math.pi / 2., math.pi)
         parsed_data = CanViewer.unpack_data(CANOPEN_TPDO4 + 1, data_structs, raw_data)
-        assert pytest.approx(parsed_data, [math.pi / 2., math.pi])
-        assert all(isinstance(d, float) for d in parsed_data)
+        self.assertTrue(pytest.approx(parsed_data, [math.pi / 2., math.pi]))
+        self.assertTrue(all(isinstance(d, float) for d in parsed_data))
 
         raw_data = CanViewer.pack_data(CANOPEN_TPDO1 + 2, data_structs)
         parsed_data = CanViewer.unpack_data(CANOPEN_TPDO1 + 2, data_structs, raw_data)
-        assert parsed_data == []
-        assert isinstance(parsed_data, list)
+        self.assertListEqual(parsed_data, [])
+        self.assertIsInstance(parsed_data, list)
 
         raw_data = CanViewer.pack_data(CANOPEN_TPDO2 + 2, data_structs, -2147483648, 0xFFFFFFFF)
         parsed_data = CanViewer.unpack_data(CANOPEN_TPDO2 + 2, data_structs, raw_data)
-        assert parsed_data == [-2147483648, 0xFFFFFFFF]
+        self.assertListEqual(parsed_data, [-2147483648, 0xFFFFFFFF])
 
         raw_data = CanViewer.pack_data(CANOPEN_TPDO3 + 2, data_structs, 0xFF, 0xFFFF)
         parsed_data = CanViewer.unpack_data(CANOPEN_TPDO3 + 2, data_structs, raw_data)
-        assert parsed_data == [0xFF, 0xFFFF]
+        self.assertListEqual(parsed_data, [0xFF, 0xFFFF])
 
         raw_data = CanViewer.pack_data(CANOPEN_TPDO4 + 2, data_structs, 0xFFFFFF, 0xFFFFFFFF)
         parsed_data = CanViewer.unpack_data(CANOPEN_TPDO4 + 2, data_structs, raw_data)
-        assert parsed_data == [0xFFFFFF, 0xFFFFFFFF]
+        self.assertListEqual(parsed_data, [0xFFFFFF, 0xFFFFFFFF])
 
         # See: http://python-future.org/compatible_idioms.html#long-integers
         from past.builtins import long
-        assert all(isinstance(d, (int, long)) for d in parsed_data)
+        self.assertTrue(all(isinstance(d, (int, long)) for d in parsed_data))
 
         # Make sure that the ValueError exception is raised
         with self.assertRaises(ValueError):
