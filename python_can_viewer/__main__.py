@@ -1,4 +1,5 @@
 #!/usr/bin/python
+# coding: utf-8
 #
 # Copyright (C) 2018 Kristian Sloth Lauszus. All rights reserved.
 #
@@ -11,7 +12,7 @@
 if __name__ == '__main__':  # pragma: no cover
     # Catch ctrl+c
     try:
-        from python_can_viewer import main
+        from .python_can_viewer import main
         main()
     except KeyboardInterrupt:
         pass

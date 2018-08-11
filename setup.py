@@ -1,4 +1,5 @@
 #!/usr/bin/python
+# coding: utf-8
 #
 # Copyright (C) 2018 Kristian Sloth Lauszus. All rights reserved.
 #
@@ -20,6 +21,7 @@ with open('README.md', 'r') as f:
 
 tests_require = [
     'future',
+    'mock',
     'pytest',
     'pytest-runner',
     'coverage',

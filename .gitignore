@@ -10,3 +10,4 @@ htmlcov/
 build/
 dist/
 .tox/
+.python-version
