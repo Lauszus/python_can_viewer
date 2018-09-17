@@ -13,9 +13,9 @@ import argparse
 import can
 import curses
 import os
-import six
 import struct
 import sys
+import time
 
 from curses.ascii import ESC as KEY_ESC, SP as KEY_SPACE
 from typing import Dict, List, Tuple, Union
@@ -86,9 +86,13 @@ class CanViewer:
         # Get the window dimensions - used for resizing the window
         self.y, self.x = self.stdscr.getmaxyx()
 
-        # Do not wait for key inputs and disable the cursor
+        # Do not wait for key inputs, disable the cursor and choose the background color automatically
         self.stdscr.nodelay(True)
         curses.curs_set(0)
+        curses.use_default_colors()
+
+        # Used to color error frames red
+        curses.init_pair(1, curses.COLOR_RED, -1)
 
         if not testing:  # pragma: no cover
             self.run()
@@ -101,9 +105,12 @@ class CanViewer:
             # Do not read the CAN-Bus when in paused mode
             if not self.paused:
                 # Read the CAN-Bus and draw it in the terminal window
-                msg = self.bus.recv(timeout=0)
+                msg = self.bus.recv(timeout=1. / 1000.)
                 if msg is not None:
                     self.draw_can_bus_message(msg)
+            else:
+                # Sleep 1 ms, so the application does not use 100 % of the CPU resources
+                time.sleep(1. / 1000.)
 
             # Read the terminal input
             key = self.stdscr.getch()
@@ -118,6 +125,17 @@ class CanViewer:
                 self.start_time = None
                 self.scroll = 0
                 self.draw_header()
+
+            # Sort by pressing 's'
+            elif key == ord('s'):
+                # Sort frames based on the CAN-Bus ID
+                self.draw_header()
+                for i, key in enumerate(sorted(self.ids.keys())):
+                    # Set the new row index, but skip the header
+                    self.ids[key]['row'] = i + 1
+
+                    # Do a recursive call, so the frames are repositioned
+                    self.draw_can_bus_message(self.ids[key]['msg'], sorting=True)
 
             # Pause by pressing space
             elif key == KEY_SPACE:
@@ -145,45 +163,6 @@ class CanViewer:
 
         # Shutdown the CAN-Bus interface
         self.bus.shutdown()
-
-    # Convert it into raw integer values and then pack the data
-    @staticmethod
-    def pack_data(cmd, cmd_to_struct, *args):  # type: (int, Dict, Union[*float, *int]) -> bytes
-        if not cmd_to_struct or len(args) == 0:
-            # If no arguments are given, then the message does not contain a data package
-            return b''
-
-        for key in cmd_to_struct.keys():
-            if cmd == key if isinstance(key, int) else cmd in key:
-                value = cmd_to_struct[key]
-                if isinstance(value, tuple):
-                    # The struct is given as the fist argument
-                    struct_t = value[0]  # type: struct.Struct
-
-                    # The conversion from SI-units to raw values are given in the rest of the tuple
-                    fmt = struct_t.format
-                    if isinstance(fmt, six.string_types):  # pragma: no cover
-                        # Needed for Python 3.7
-                        fmt = six.b(fmt)
-
-                    # Make sure the endian is given as the first argument
-                    assert six.byte2int(fmt) == ord('<') or six.byte2int(fmt) == ord('>')
-
-                    # Disable rounding if the format is a float
-                    data = []
-                    for c, arg, val in zip(six.iterbytes(fmt[1:]), args, value[1:]):
-                        if c == ord('f'):
-                            data.append(arg * val)
-                        else:
-                            data.append(round(arg * val))
-                else:
-                    # No conversion from SI-units is needed
-                    struct_t = value  # type: struct.Struct
-                    data = args
-
-                return struct_t.pack(*data)
-        else:
-            raise ValueError('Unknown command: 0x{:02X}'.format(cmd))
 
     # Unpack the data and then convert it into SI-units
     @staticmethod
@@ -302,54 +281,51 @@ class CanViewer:
             # Increment frame counter
             self.ids[key]['count'] += 1
 
-        # Sort frames based on the CAN-Bus ID if a new frame was added
-        if new_id_added:
-            self.draw_header()
-            for i, key in enumerate(sorted(self.ids.keys())):
-                # Set the new row index, but skip the header
-                self.ids[key]['row'] = i + 1
+        # Format the CAN-Bus ID as a hex value
+        arbitration_id_string = '0x{0:0{1}X}'.format(msg.arbitration_id, 8 if msg.is_extended_id else 3)
 
-                # Do a recursive call, so the frames are repositioned
-                self.draw_can_bus_message(self.ids[key]['msg'], sorting=True)
+        # Generate data string
+        data_string = ''
+        if msg.dlc > 0:
+            data_string = ' '.join('{:02X}'.format(x) for x in msg.data)
+
+        # Check if is a CANopen message
+        if self.ignore_canopen:
+            canopen_function_code_string, canopen_node_id_string = None, None
         else:
-            # Format the CAN-Bus ID as a hex value
-            arbitration_id_string = '0x{0:0{1}X}'.format(msg.arbitration_id, 8 if msg.is_extended_id else 3)
+            canopen_function_code_string, canopen_node_id_string = self.parse_canopen_message(msg)
 
-            # Generate data string
-            data_string = ''
-            if msg.dlc > 0:
-                data_string = ' '.join('{:02X}'.format(x) for x in msg.data)
+        # Use red for error frames
+        if msg.is_error_frame:
+            color = curses.color_pair(1)
+        else:
+            color = curses.color_pair(0)
 
-            # Check if is a CANopen message
-            if self.ignore_canopen:
-                canopen_function_code_string, canopen_node_id_string = None, None
-            else:
-                canopen_function_code_string, canopen_node_id_string = self.parse_canopen_message(msg)
+        # Now draw the CAN-Bus message on the terminal window
+        self.draw_line(self.ids[key]['row'], 0, str(self.ids[key]['count']), color)
+        self.draw_line(self.ids[key]['row'], 8, '{0:.6f}'.format(self.ids[key]['msg'].timestamp - self.start_time),
+                       color)
+        self.draw_line(self.ids[key]['row'], 23, '{0:.6f}'.format(self.ids[key]['dt']), color)
+        self.draw_line(self.ids[key]['row'], 35, arbitration_id_string, color)
+        self.draw_line(self.ids[key]['row'], 47, str(msg.dlc), color)
+        self.draw_line(self.ids[key]['row'], 52, data_string, color)
+        if canopen_function_code_string:
+            self.draw_line(self.ids[key]['row'], 77, canopen_function_code_string, color)
+        if canopen_node_id_string:
+            self.draw_line(self.ids[key]['row'], 88, canopen_node_id_string, color)
 
-            # Now draw the CAN-Bus message on the terminal window
-            self.draw_line(self.ids[key]['row'], 0, str(self.ids[key]['count']))
-            self.draw_line(self.ids[key]['row'], 8, '{0:.6f}'.format(self.ids[key]['msg'].timestamp - self.start_time))
-            self.draw_line(self.ids[key]['row'], 23, '{0:.6f}'.format(self.ids[key]['dt']))
-            self.draw_line(self.ids[key]['row'], 35, arbitration_id_string)
-            self.draw_line(self.ids[key]['row'], 47, str(msg.dlc))
-            self.draw_line(self.ids[key]['row'], 52, data_string)
-            if canopen_function_code_string:
-                self.draw_line(self.ids[key]['row'], 77, canopen_function_code_string)
-            if canopen_node_id_string:
-                self.draw_line(self.ids[key]['row'], 88, canopen_node_id_string)
-
-            if self.data_structs:
-                try:
-                    values_list = []
-                    for x in self.unpack_data(msg.arbitration_id, self.data_structs, msg.data):
-                        if isinstance(x, float):
-                            values_list.append('{0:.6f}'.format(x))
-                        else:
-                            values_list.append(str(x))
-                    values_string = ' '.join(values_list)
-                    self.draw_line(self.ids[key]['row'], 97 - (20 if self.ignore_canopen else 0), values_string)
-                except (ValueError, struct.error):
-                    pass
+        if self.data_structs:
+            try:
+                values_list = []
+                for x in self.unpack_data(msg.arbitration_id, self.data_structs, msg.data):
+                    if isinstance(x, float):
+                        values_list.append('{0:.6f}'.format(x))
+                    else:
+                        values_list.append(str(x))
+                values_string = ' '.join(values_list)
+                self.draw_line(self.ids[key]['row'], 97 - (20 if self.ignore_canopen else 0), values_string, color)
+            except (ValueError, struct.error):
+                pass
 
         return self.ids[key]
 
@@ -365,7 +341,7 @@ class CanViewer:
             pass
 
     def draw_header(self):
-        self.stdscr.clear()
+        self.stdscr.erase()
         self.draw_line(0, 0, 'Count', curses.A_BOLD)
         self.draw_line(0, 8, 'Time', curses.A_BOLD)
         self.draw_line(0, 23, 'dt', curses.A_BOLD)
@@ -385,19 +361,19 @@ class CanViewer:
             self.draw_can_bus_message(self.ids[key]['msg'])
 
 
-# noinspection PyUnresolvedReferences,PyProtectedMember,PyMethodMayBeStatic,PyUnusedLocal
-class SmartFormatter(argparse.HelpFormatter):  # pragma: no cover
+# noinspection PyProtectedMember
+class SmartFormatter(argparse.HelpFormatter):
 
     def _get_default_metavar_for_optional(self, action):
         return action.dest.upper()
 
     def _format_usage(self, usage, actions, groups, prefix):
         # Use uppercase for "Usage:" text
-        return argparse.HelpFormatter._format_usage(self, usage, actions, groups, 'Usage: ')
+        return super(SmartFormatter, self)._format_usage(usage, actions, groups, 'Usage: ')
 
     def _format_args(self, action, default_metavar):
         if action.nargs != argparse.REMAINDER and action.nargs != argparse.ONE_OR_MORE:
-            return argparse.HelpFormatter._format_args(self, action, default_metavar)
+            return super(SmartFormatter, self)._format_args(action, default_metavar)
 
         # Use the metavar if "REMAINDER" or "ONE_OR_MORE" is set
         get_metavar = self._metavar_formatter(action, default_metavar)
@@ -405,7 +381,7 @@ class SmartFormatter(argparse.HelpFormatter):  # pragma: no cover
 
     def _format_action_invocation(self, action):
         if not action.option_strings or action.nargs == 0:
-            return argparse.HelpFormatter._format_action_invocation(self, action)
+            return super(SmartFormatter, self)._format_action_invocation(action)
 
         # Modified so "-s ARGS, --long ARGS" is replaced with "-s, --long ARGS"
         else:
@@ -423,7 +399,14 @@ class SmartFormatter(argparse.HelpFormatter):  # pragma: no cover
         # Allow to manually split the lines
         if text.startswith('R|'):
             return text[2:].splitlines()
-        return argparse.HelpFormatter._split_lines(self, text, width)
+        return super(SmartFormatter, self)._split_lines(text, width)
+
+    def _fill_text(self, text, width, indent):
+        if text.startswith('R|'):
+            # noinspection PyTypeChecker
+            return ''.join(indent + line + '\n' for line in text[2:].splitlines())
+        else:
+            return super(SmartFormatter, self)._fill_text(text, width, indent)
 
 
 def parse_args(args):
@@ -433,8 +416,18 @@ def parse_args(args):
         kwargs = {'allow_abbrev': False}
 
     # Parse command line arguments
-    parser = argparse.ArgumentParser('python -m python_can_viewer',
+    parser = argparse.ArgumentParser('python -m can.viewer',
                                      description='A simple CAN viewer terminal application written in Python',
+                                     epilog='R|Shortcuts: '
+                                            '\n        +---------+-------------------------+'
+                                            '\n        |   Key   |       Description       |'
+                                            '\n        +---------+-------------------------+'
+                                            '\n        | ESQ/q   | Exit the viewer         |'
+                                            '\n        | c       | Clear the stored frames |'
+                                            '\n        | s       | Sort the stored frames  |'
+                                            '\n        | SPACE   | Pause the viewer        |'
+                                            '\n        | UP/DOWN | Scroll the viewer       |'
+                                            '\n        +---------+-------------------------+',
                                      formatter_class=SmartFormatter, add_help=False, **kwargs)
 
     optional = parser.add_argument_group('Optional arguments')
@@ -448,61 +441,67 @@ def parse_args(args):
     optional.add_argument('-b', '--bitrate', type=int, help='''Bitrate to use for the given CAN interface''')
 
     optional.add_argument('-c', '--channel', help='''Most backend interfaces require some sort of channel.
-                          for example with the serial interface the channel might be a rfcomm device: "/dev/rfcomm0"
+                          For example with the serial interface the channel might be a rfcomm device: "/dev/rfcomm0"
                           with the socketcan interfaces valid channel examples include: "can0", "vcan0".
-                          (default: use default for the specified interface)''', default=None)
+                          (default: use default for the specified interface)''')
 
     optional.add_argument('-d', '--decode', dest='decode',
-                          help='''R|Specify how to convert the raw bytes into real values. \
-                          \nThe ID of the frame is given as the first argument and the format as the second. \
-                          \nThe Python struct package is used to unpack the received data \
-                          \nwhere the format characters have the following meaning: \
-                          \n      < = little-endian, > = big-endian \
-                          \n      x = pad byte \
-                          \n      c = char \
-                          \n      ? = bool \
-                          \n      b = int8_t, B = uint8_t \
-                          \n      h = int16, H = uint16 \
-                          \n      l = int32_t, L = uint32_t \
-                          \n      q = int64_t, Q = uint64_t \
-                          \n      f = float (32-bits), d = double (64-bits) \
-                          \nFx to convert six bytes with ID 0x100 into uint8_t, uint16 and uint32_t: \
-                          \n  $ python -m python_can_viewer -d "100:<BHL" \
-                          \nNote that the IDs are always interpreted as hex values. \
-                          \nAn optional conversion from integers to real units can be given \
-                          \nas additional arguments. In order to convert from raw integer \
-                          \nvalues the values are multiplied with the corresponding scaling value, \
-                          \nsimilarly the values are divided by the scaling value in order \
-                          \nto convert from real units to raw integer values. \
-                          \nFx lets say the uint8_t needs no conversion, but the uint16 and the uint32_t \
-                          \nneeds to be divided by 10 and 100 respectively: \
-                          \n  $ python -m python_can_viewer -d "101:<BHL:1:10.0:100.0" \
-                          \nBe aware that integer division is performed if the scaling value is an integer. \
-                          \nMultiple arguments are separated by spaces: \
-                          \n  $ python -m python_can_viewer -d "100:<BHL" "101:<BHL:1:10.0:100.0" \
-                          \nAlternatively a file containing the conversion strings separated by new lines \
-                          \ncan be given as input: \
-                          \n  $ cat file.txt \
-                          \n      100:<BHL \
-                          \n      101:<BHL:1:10.0:100.0 \
-                          \n  $ python -m python_can_viewer -d file.txt''',
+                          help='R|Specify how to convert the raw bytes into real values.'
+                               '\nThe ID of the frame is given as the first argument and the format as the second.'
+                               '\nThe Python struct package is used to unpack the received data'
+                               '\nwhere the format characters have the following meaning:'
+                               '\n      < = little-endian, > = big-endian'
+                               '\n      x = pad byte'
+                               '\n      c = char'
+                               '\n      ? = bool'
+                               '\n      b = int8_t, B = uint8_t'
+                               '\n      h = int16, H = uint16'
+                               '\n      l = int32_t, L = uint32_t'
+                               '\n      q = int64_t, Q = uint64_t'
+                               '\n      f = float (32-bits), d = double (64-bits)'
+                               '\nFx to convert six bytes with ID 0x100 into uint8_t, uint16 and uint32_t:'
+                               '\n  $ python -m can.viewer -d "100:<BHL"'
+                               '\nNote that the IDs are always interpreted as hex values.'
+                               '\nAn optional conversion from integers to real units can be given'
+                               '\nas additional arguments. In order to convert from raw integer'
+                               '\nvalues the values are multiplied with the corresponding scaling value,'
+                               '\nsimilarly the values are divided by the scaling value in order'
+                               '\nto convert from real units to raw integer values.'
+                               '\nFx lets say the uint8_t needs no conversion, but the uint16 and the uint32_t'
+                               '\nneeds to be divided by 10 and 100 respectively:'
+                               '\n  $ python -m can.viewer -d "101:<BHL:1:10.0:100.0"'
+                               '\nBe aware that integer division is performed if the scaling value is an integer.'
+                               '\nMultiple arguments are separated by spaces:'
+                               '\n  $ python -m can.viewer -d "100:<BHL" "101:<BHL:1:10.0:100.0"'
+                               '\nAlternatively a file containing the conversion strings separated by new lines'
+                               '\ncan be given as input:'
+                                '\n  $ cat file.txt'
+                                '\n      100:<BHL'
+                                '\n      101:<BHL:1:10.0:100.0'
+                                '\n  $ python -m can.viewer -d file.txt',
                           metavar='{<id>:<format>,<id>:<format>:<scaling1>:...:<scalingN>,file.txt}',
                           nargs=argparse.ONE_OR_MORE, default='')
 
-    optional.add_argument('-f', '--filter', help='''R|Comma separated CAN filters for the given CAN interface: \
-                          \n      <can_id>:<can_mask> (matches when <received_can_id> & mask == can_id & mask) \
-                          \n      <can_id>~<can_mask> (matches when <received_can_id> & mask != can_id & mask) \
-                          \nFx to show only frames with ID 0x100 to 0x103: \
-                          \n      python -m python_can_viewer -f 100:7FC \
-                          \nNote that the ID and mask are alway interpreted as hex values''',
+    optional.add_argument('-f', '--filter', help='R|Comma separated CAN filters for the given CAN interface:'
+                          '\n      <can_id>:<can_mask> (matches when <received_can_id> & mask == can_id & mask)'
+                          '\n      <can_id>~<can_mask> (matches when <received_can_id> & mask != can_id & mask)'
+                          '\nFx to show only frames with ID 0x100 to 0x103:'
+                          '\n      python -m can.viewer -f 100:7FC'
+                          '\nNote that the ID and mask are alway interpreted as hex values',
                           metavar='{<can_id>:<can_mask>,<can_id>~<can_mask>}', nargs=argparse.ONE_OR_MORE, default='')
 
     optional.add_argument('-i', '--interface', dest='interface',
-                          help='''R|Specify the backend CAN interface to use. (default: "socketcan")''',
-                          choices=sorted(can.VALID_INTERFACES), default='socketcan')
+                          help='R|Specify the backend CAN interface to use.',
+                          choices=sorted(can.VALID_INTERFACES))
 
     optional.add_argument('--ignore-canopen', dest='ignore_canopen', help='''Do not print CANopen information''',
                           action='store_true')
+
+    # Print help message when no arguments are given
+    if len(args) < 2:
+        parser.print_help(sys.stderr)
+        import errno
+        raise SystemExit(errno.EINVAL)
 
     parsed_args = parser.parse_args(args)
 
@@ -577,7 +576,7 @@ def parse_args(args):
 def main():  # pragma: no cover
     parsed_args, can_filters, data_structs, ignore_canopen = parse_args(sys.argv[1:])
 
-    config = {}
+    config = {'single_handle': True}
     if can_filters:
         config['can_filters'] = can_filters
     if parsed_args.interface:
@@ -586,7 +585,7 @@ def main():  # pragma: no cover
         config['bitrate'] = parsed_args.bitrate
 
     # Create a CAN-Bus interface
-    bus = can.interface.Bus(parsed_args.channel, **config)
+    bus = can.Bus(parsed_args.channel, **config)
     # print('Connected to {}: {}'.format(bus.__class__.__name__, bus.channel_info))
 
     curses.wrapper(CanViewer, bus, data_structs, ignore_canopen)
