@@ -11,6 +11,16 @@ _________
 
 A simple CAN viewer terminal application written in Python. Python 2, Python 3, pypy and pypy3 are supported.
 
+## Deprecated
+
+This package is deprecated, as it is now part of the [python-can](https://github.com/hardbyte/python-can) package.
+
+Improvements and bug-fixes will not be back-ported. For that reason it is recommended to use the [python-can](https://github.com/hardbyte/python-can) package instead by executing the following:
+
+```bash
+python -m can.viewer
+```
+
 ## Usage
 
 The program can be installed via pip:
