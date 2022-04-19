@@ -16,6 +16,7 @@ import os
 import six
 import struct
 import sys
+from time import sleep
 
 from curses.ascii import ESC as KEY_ESC, SP as KEY_SPACE
 from typing import Dict, List, Tuple, Union
@@ -451,6 +452,8 @@ def parse_args(args):
                           for example with the serial interface the channel might be a rfcomm device: "/dev/rfcomm0"
                           with the socketcan interfaces valid channel examples include: "can0", "vcan0".
                           (default: use default for the specified interface)''', default=None)
+    
+    optional.add_argument('-s', '--serial_number', help='''specify SN''', default=None)
 
     optional.add_argument('-d', '--decode', dest='decode',
                           help='''R|Specify how to convert the raw bytes into real values. \
@@ -576,7 +579,8 @@ def parse_args(args):
 
 def main():  # pragma: no cover
     parsed_args, can_filters, data_structs, ignore_canopen = parse_args(sys.argv[1:])
-
+    print(parsed_args)
+    sleep(1)
     config = {}
     if can_filters:
         config['can_filters'] = can_filters
@@ -584,6 +588,8 @@ def main():  # pragma: no cover
         config['interface'] = parsed_args.interface
     if parsed_args.bitrate:
         config['bitrate'] = parsed_args.bitrate
+    if parsed_args.serial_number:
+        config['UniqueHardwareId'] = parsed_args.serial_number
 
     # Create a CAN-Bus interface
     bus = can.interface.Bus(parsed_args.channel, **config)
