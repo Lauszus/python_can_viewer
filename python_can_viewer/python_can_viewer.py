@@ -589,7 +589,7 @@ def main():  # pragma: no cover
     if parsed_args.bitrate:
         config['bitrate'] = parsed_args.bitrate
     if parsed_args.serial_number:
-        config['UniqueHardwareId'] = parsed_args.serial_number
+        config['unique_hardware_id'] = parsed_args.serial_number
 
     # Create a CAN-Bus interface
     bus = can.interface.Bus(parsed_args.channel, **config)
