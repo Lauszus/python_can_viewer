@@ -16,7 +16,6 @@ import os
 import six
 import struct
 import sys
-from time import sleep
 
 from curses.ascii import ESC as KEY_ESC, SP as KEY_SPACE
 from typing import Dict, List, Tuple, Union
@@ -579,8 +578,6 @@ def parse_args(args):
 
 def main():  # pragma: no cover
     parsed_args, can_filters, data_structs, ignore_canopen = parse_args(sys.argv[1:])
-    print(parsed_args)
-    sleep(1)
     config = {}
     if can_filters:
         config['can_filters'] = can_filters
